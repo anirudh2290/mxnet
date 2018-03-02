@@ -112,6 +112,15 @@ def test_manual_file():
     for batch in iter(data_train):
         print(data_train.getdata().asnumpy())
 
+def test_atom_file():
+    cwd = os.getcwd()
+    data_path = os.path.join(cwd, "line_endings.csv")
+    data_train = mx.io.CSVIter(data_csv=data_path,
+                               data_shape=(1, 4),
+                               batch_size=5)
+    for batch in iter(data_train):
+        print(data_train.getdata().asnumpy())
+
 def test_numpy_file():
     data_path = "numpy.csv"
     np.savetxt(data_path,
