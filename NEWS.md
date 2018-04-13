@@ -2,19 +2,19 @@ MXNet Change Log
 ================
 ## 1.2.0
 ### New Features - Added Scala Inference APIs
-- Implemented new [Scala Inference APIs](https://cwiki.apache.org/confluence/display/MXNET/MXNetScalaInferenceAPI) which offer an easy-to-use, and Scala Idiomatic and thread-safe high level APIs for performing predictions with deep learning models trained with MXNet (#9678). Implemented new ImageClassifier class provides APIs for classification tasks on a Java BufferedImage using a pre-trained model you provide (#10054). Implemented new ObjectDetector class provides APIs for object and boundary detections on a Java BufferedImage using a pre-trained model you provide (#10229).
+- Implemented new [Scala Inference APIs](https://cwiki.apache.org/confluence/display/MXNET/MXNetScalaInferenceAPI) which offer an easy-to-use, Scala Idiomatic and thread-safe high level APIs for performing predictions with deep learning models trained with MXNet (#9678). Implemented new ImageClassifier class provides APIs for classification tasks on a Java BufferedImage using a pre-trained model you provide (#10054). Implemented new ObjectDetector class provides APIs for object and boundary detections on a Java BufferedImage using a pre-trained model you provide (#10229).
 
 ### New Features - Added module to import ONNX models into MXNet
-- Implemented new ONNX module in MXNet offers an easy to use API to import ONNX models into MXNet's symbolic interface (#9963). Checkout the example on how you could use this API to import ONNX models and perform inference on MXNet. 
+- Implemented a new ONNX module in MXNet offers an easy to use API to import ONNX models into MXNet's symbolic interface (#9963). Checkout the [example](https://github.com/apache/incubator-mxnet/blob/master/example/onnx/super_resolution.py) on how you could use this API to import ONNX models and perform inference on MXNet. 
 
 ### New Features - Added support for Model Quantization with Calibration
 - Implemented model quantization by adopting the [TensorFlow approach](https://www.tensorflow.org/performance/quantization) with calibration by borrowing the idea from Nvidia's [TensorRT](http://on-demand.gputechconf.com/gtc/2017/presentation/s7310-8-bit-inference-with-tensorrt.pdf). The focus of this work is on keeping quantized models (ConvNets for now) inference accuracy loss under control when compared to their corresponding FP32 models. Please see the [example](https://github.com/apache/incubator-mxnet/tree/master/example/quantization) on how to quantize a FP32 model with or without calibration (#9552).
 
 ### New Features - MKL-DNN Integration
-- MXNet now integrates with Intel MKL-DNN to accelerate neural network operators: Convolution, Deconvolution, FullyConnected, Pooling, Batch Normalization, Activation, LRN, Softmax, as well as some common operators: sum and concat (#9677). This integration allows NDArray contains data with MKL-DNN layouts and reduces data layout conversion to get the maximal performance from MKL-DNN.
+- MXNet now integrates with Intel MKL-DNN to accelerate neural network operators: Convolution, Deconvolution, FullyConnected, Pooling, Batch Normalization, Activation, LRN, Softmax, as well as some common operators: sum and concat (#9677). This integration allows NDArray to contain data with MKL-DNN layouts and reduces data layout conversion to get the maximal performance from MKL-DNN.
 
 ### New Features - Added Exception Handling Support for Operators
-- Implemented [Exception Handling Support for Operators](https://cwiki.apache.org/confluence/display/MXNET/Improved+exception+handling+in+MXNet) in MXNet. MXNet now transports backend C++ exceptions to the different language front-ends and prevents crashes when exception is thrown during operator execution (#9681).
+- Implemented [Exception Handling Support for Operators](https://cwiki.apache.org/confluence/display/MXNET/Improved+exception+handling+in+MXNet) in MXNet. MXNet now transports backend C++ exceptions to the different language front-ends and prevents crashes when exceptions are thrown during operator execution (#9681).
 
 ### New Features - Enhanced FP16 support
 - Added support for distributed mixed precision training with FP16. It supports storing of master copy of weights in float32 with the multi_precision mode of optimizers (#10183). Improved speed of float16 operations on x86 CPU by 8 times through F16C instruction set. Added support for more operators to work with FP16 inputs (#10125, #10078, #10169). Added a tutorial on using mixed precision with FP16 (#10391).
