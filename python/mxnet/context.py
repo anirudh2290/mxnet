@@ -236,4 +236,4 @@ def current_context():
     -------
     default_ctx : Context
     """
-    return Context.default_ctx
+    return Context.default_ctx.default_ctx
