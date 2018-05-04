@@ -216,16 +216,49 @@ void BinaryBroadcastCompute(const nnvm::NodeAttrs& attrs,
   } else {
     if (req[0] != kNullOp) {
       mshadow::Stream<xpu> *s = ctx.get_stream<xpu>();
+      /*
       MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
         BROADCAST_NDIM_SWITCH(ndim, NDim, {
+      */
+  if (ndim <= 2) {
+    const int NDim = 2;
+    typedef float DType;
           mshadow::Shape<NDim> oshape = new_oshape.get<NDim>();
           mshadow::Shape<NDim> lstride = mxnet_op::calc_stride(new_lshape.get<NDim>());
           mshadow::Shape<NDim> rstride = mxnet_op::calc_stride(new_rshape.get<NDim>());
           mxnet_op::Kernel<mxnet_op::binary_broadcast_kernel<NDim, DType, OP>, xpu>::
           template LaunchEx(s, new_oshape.Size(), req[0], lstride, rstride, oshape,
           inputs[0].dptr<DType>(), inputs[1].dptr<DType>(), outputs[0].dptr<DType>());
+
+  } else if (ndim <= 4) {
+    const int NDim = 4;
+            typedef float DType;
+          mshadow::Shape<NDim> oshape = new_oshape.get<NDim>();
+          mshadow::Shape<NDim> lstride = mxnet_op::calc_stride(new_lshape.get<NDim>());
+          mshadow::Shape<NDim> rstride = mxnet_op::calc_stride(new_rshape.get<NDim>());
+          mxnet_op::Kernel<mxnet_op::binary_broadcast_kernel<NDim, DType, OP>, xpu>::
+          template LaunchEx(s, new_oshape.Size(), req[0], lstride, rstride, oshape,
+          inputs[0].dptr<DType>(), inputs[1].dptr<DType>(), outputs[0].dptr<DType>());
+
+  } else if (ndim <= broadcast::MAX_DIM) {
+    const int NDim = broadcast::MAX_DIM;
+    typedef float DType;
+    mshadow::Shape<NDim> oshape = new_oshape.get<NDim>();
+    mshadow::Shape<NDim> lstride = mxnet_op::calc_stride(new_lshape.get<NDim>());
+    mshadow::Shape<NDim> rstride = mxnet_op::calc_stride(new_rshape.get<NDim>());
+    mxnet_op::Kernel<mxnet_op::binary_broadcast_kernel<NDim, DType, OP>, xpu>::
+    template LaunchEx(s, new_oshape.Size(), req[0], lstride, rstride, oshape,
+    inputs[0].dptr<DType>(), inputs[1].dptr<DType>(), outputs[0].dptr<DType>());
+
+  } else {
+    LOG(FATAL) << "NDim too large ";
+  }
+
+
+      /*
         });
       });
+      */
     }
   }
 }

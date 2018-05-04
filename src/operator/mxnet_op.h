@@ -266,6 +266,20 @@ MSHADOW_XINLINE int unravel_dot(const int idx, const Shape<ndim>& shape,
   return ret;
 }
 
+/* Combining unravel and dot test */
+template<int ndim>
+MSHADOW_XINLINE int unravel_dot(const int idx, const Shape<ndim>& shape,
+                                const Shape<ndim>& stride, Shape<ndim>& coord) {
+    int ret = 0;
+    #pragma unroll
+    for (int i = ndim - 1, j = idx; i >=0; --i) {
+        int tmp = j /shape[i];
+        coord[i] = j - tmp*shape[i];
+        ret += coord[i]*stride[i];
+        j = tmp;
+    }
+    return ret;
+}
 
 /* Calculate stride of each dim from shape */
 template<int ndim>
