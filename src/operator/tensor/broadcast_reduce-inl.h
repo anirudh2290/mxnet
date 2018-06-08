@@ -293,13 +293,11 @@ void Reduce(Stream<cpu> *s, const TBlob& small, const OpReqType req,
     N, M, req == kAddTo, big.dptr<DType>(), small.dptr<DType>(), big.shape_.get<ndim>(),
     small.shape_.get<ndim>(), rshape, rstride, ws_dptr);
   */
-/*
 #pragma omp parallel for num_threads(engine::OpenMP::Get()->GetRecommendedOMPThreadCount())
 for (int k = 0; k < M; k++) {
   Shape<ndim> coord = unravel(k, rshape);
   ws_dptr[k] = dot(coord, rstride);
 }
-*/
 
   mxnet_op::Kernel<seq_reduce_kernel<Reducer, ndim, DType, OP>, cpu>::template LaunchEx(
     s, N, M, req == kAddTo, big.dptr<DType>(), small.dptr<DType>(), big.shape_.get<ndim>(),
