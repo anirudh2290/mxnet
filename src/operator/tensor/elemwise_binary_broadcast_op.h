@@ -503,24 +503,67 @@ void BinaryBroadcastBackwardUseNone(const nnvm::NodeAttrs& attrs,
   if (!ndim) {
     ElemwiseBinaryOp::BackwardUseNone<xpu, LOP, ROP>(attrs, ctx, inputs, req, outputs);
   } else {
+      /*
     MSHADOW_TYPE_SWITCH(outputs[0].type_flag_, DType, {
+    */
+      typedef float DType;
       Stream<xpu> *s = ctx.get_stream<xpu>();
       const TBlob lhs = outputs[0].reshape(new_lshape);
       const TBlob rhs = outputs[1].reshape(new_rshape);
       const TBlob out = inputs[0].reshape(new_oshape);
+      /*
       BROADCAST_NDIM_SWITCH(ndim, NDim, {
-        // Request temporary storage
+      */
+  if (ndim <= 2) {
+    const int NDim = 2;
+// Request temporary storage
         size_t workspace_size_l = ReduceWorkspaceSize<NDim, DType>(
             s, lhs.shape_, req[0], out.shape_);
         size_t workspace_size_r = ReduceWorkspaceSize<NDim, DType>(
             s, rhs.shape_, req[1], out.shape_);
-        size_t workspace_size = std::max(workspace_size_l, workspace_size_r);
+        size_t workspace_size = new_oshape.Size();
+        using nnvm::dim_t;
+        Tensor<xpu, 1, char> workspace =
+          ctx.requested[0].get_space_typed<xpu, 1, char>(Shape1(workspace_size * sizeof(DType)), s);
+        Reduce<red::sum, NDim, DType, LOP>(s, lhs, req[0], workspace, out);
+        Reduce<red::sum, NDim, DType, ROP>(s, rhs, req[1], workspace, out);
+
+  } else if (ndim <= 4) {
+    const int NDim = 4;
+// Request temporary storage
+        size_t workspace_size_l = ReduceWorkspaceSize<NDim, DType>(
+            s, lhs.shape_, req[0], out.shape_);
+        size_t workspace_size_r = ReduceWorkspaceSize<NDim, DType>(
+            s, rhs.shape_, req[1], out.shape_);
+        size_t workspace_size = new_oshape.Size();
         Tensor<xpu, 1, char> workspace =
           ctx.requested[0].get_space_typed<xpu, 1, char>(Shape1(workspace_size), s);
         Reduce<red::sum, NDim, DType, LOP>(s, lhs, req[0], workspace, out);
         Reduce<red::sum, NDim, DType, ROP>(s, rhs, req[1], workspace, out);
+
+  } else if (ndim <= broadcast::MAX_DIM) {
+    const int NDim = broadcast::MAX_DIM;
+// Request temporary storage
+        size_t workspace_size_l = ReduceWorkspaceSize<NDim, DType>(
+            s, lhs.shape_, req[0], out.shape_);
+        size_t workspace_size_r = ReduceWorkspaceSize<NDim, DType>(
+            s, rhs.shape_, req[1], out.shape_);
+        size_t workspace_size = new_oshape.Size();
+        Tensor<xpu, 1, char> workspace =
+          ctx.requested[0].get_space_typed<xpu, 1, char>(Shape1(workspace_size), s);
+        Reduce<red::sum, NDim, DType, LOP>(s, lhs, req[0], workspace, out);
+        Reduce<red::sum, NDim, DType, ROP>(s, rhs, req[1], workspace, out);
+
+  } else {
+    LOG(FATAL) << "NDim too large ";
+  }
+
+     /*
       });
+      */
+    /*
     });
+    */
   }
 }
 

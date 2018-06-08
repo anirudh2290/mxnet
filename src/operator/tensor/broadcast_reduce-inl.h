@@ -31,6 +31,7 @@
 #include <string>
 #include <utility>
 #include "../mshadow_op.h"
+#include "../operator_common.h"
 
 namespace mxnet {
 namespace op {
@@ -156,14 +157,15 @@ template<typename Reducer, int ndim, typename DType, typename OP>
 MSHADOW_XINLINE void seq_reduce_assign(const int idx, const int M, const bool addto,
                                        const DType* __restrict big, DType *small,
                                        const Shape<ndim>& bshape, const Shape<ndim>& sshape,
-                                       const Shape<ndim>& rshape, const Shape<ndim>& rstride) {
+                                       const Shape<ndim>& rshape, const Shape<ndim>& rstride, DType* ws_dptr) {
   Shape<ndim> coord = unravel(idx, sshape);
   int j = ravel(coord, bshape);
-  DType val, residual;
-  Reducer::SetInitValue(val, residual);
+  DType val;
+  Reducer::SetInitValue(val);
+  using namespace mxnet_op;
+  #pragma unroll
   for (int k = 0; k < M; ++k) {
-    coord = unravel(k, rshape);
-    Reducer::Reduce(val, OP::Map(big[j + dot(coord, rstride)]), residual);
+    Reducer::Reduce(val, OP::Map(big[j + static_cast<int>(ws_dptr[k])]));
   }
   assign(&small[idx], addto, val);
 }
@@ -196,24 +198,112 @@ template<typename Reducer, int ndim, typename DType, typename OP>
 void seq_reduce_compute(const int N, const int M, const bool addto,
                         const DType *big, DType *small, const Shape<ndim> bshape,
                         const Shape<ndim> sshape, const Shape<ndim> rshape,
-                        const Shape<ndim> rstride) {
+                        const Shape<ndim> rstride, DType* ws_dptr) {
+  #pragma omp parallel for num_threads(engine::OpenMP::Get()->GetRecommendedOMPThreadCount())
+  for (int k = 0; k < M; k++) {
+    Shape<ndim> coord = unravel(k, rshape);
+    ws_dptr[k] = dot(coord, rstride);
+  }
   #pragma omp parallel for num_threads(engine::OpenMP::Get()->GetRecommendedOMPThreadCount())
   for (int idx = 0; idx < N; ++idx) {
     seq_reduce_assign<Reducer, ndim, DType, OP>(idx, M, addto, big, small, bshape, sshape, rshape,
-      rstride);
+      rstride, ws_dptr);
   }
 }
+
+template <typename Reducer, int ndim, typename DType, typename OP>
+struct seq_reduce_kernel {
+  MSHADOW_XINLINE static void
+  Map(int start, int end, int M, const bool addto, const DType *big,
+      DType *small, const Shape<ndim> bshape, const Shape<ndim> sshape,
+      const Shape<ndim> rshape, const Shape<ndim> rstride, DType *ws_dptr) {
+    for (int idx = start; idx < end; ++idx) {
+      Shape<ndim> coord = unravel(idx, sshape);
+      int j = ravel(coord, bshape);
+      //DType val, residual;
+      //Reducer::SetInitValue(val, residual);
+      // coord = unravel(0, rshape);
+      // auto lidx = static_cast<index_t>(dot(coord, rstride));
+      DType val;
+      Reducer::SetInitValue(val);
+      using namespace mxnet_op;
+#pragma unroll
+      for (int k = 0; k < M; ++k) {
+        coord = unravel(k, rshape);
+        Reducer::Reduce(val, OP::Map(big[j + static_cast<int>(ws_dptr[k])]));
+        /*
+        Reducer::Reduce(val, OP::Map(big[j + dot(coord, rstride)]));
+        */
+      }
+      assign(&small[idx], addto, val);
+    }
+  }
+};
+
+template <typename Reducer, int ndim, typename DType, typename OP1, typename OP2>
+struct seq_reduce_kernel2 {
+
+  MSHADOW_XINLINE static void Map(int start, int end, const int M, const bool addto,
+                                  const DType* __restrict big, const DType* __restrict lhs,
+                                  const DType* __restrict rhs, DType *small,
+                                  const Shape<ndim>& big_shape, const Shape<ndim>& lhs_shape0,
+                                  const Shape<ndim>& rhs_shape0,
+                                  const Shape<ndim>& small_shape, const Shape<ndim>& rshape,
+                                  const Shape<ndim>& lhs_shape, const Shape<ndim>& rhs_shape,
+                                  const Shape<ndim>& rstride, const Shape<ndim>& lhs_stride,
+                                  const Shape<ndim>& rhs_stride) {
+#pragma unroll
+    for (int idx = start; idx < end; ++idx) {
+  Shape<ndim> coord = unravel(idx, small_shape);
+  const int idx_big0 = ravel(coord, big_shape);
+  const int idx_lhs0 = ravel(coord, lhs_shape0);
+  const int idx_rhs0 = ravel(coord, rhs_shape0);
+  DType val, residual;
+  Reducer::SetInitValue(val, residual);
+  for (int k = 0; k < M; ++k) {
+    Shape<ndim> coord_big = unravel(k, rshape);
+    int idx_big = idx_big0 + dot(coord_big, rstride);
+
+    Shape<ndim> coord_lhs = unravel(k, lhs_shape);
+    int idx_lhs = idx_lhs0 + dot(coord_lhs, lhs_stride);
+
+    Shape<ndim> coord_rhs = unravel(k, rhs_shape);
+    int idx_rhs = idx_rhs0 + dot(coord_rhs, rhs_stride);
+
+    Reducer::Reduce(val, OP1::Map(big[idx_big], OP2::Map(lhs[idx_lhs], rhs[idx_rhs])), residual);
+  }
+  assign(&small[idx], addto, val);
+  }
+  }
+
+};
 
 template<typename Reducer, int ndim, typename DType, typename OP>
 void Reduce(Stream<cpu> *s, const TBlob& small, const OpReqType req,
             const Tensor<cpu, 1, char>& workspace, const TBlob& big) {
+  using namespace mxnet_op;
   if (req == kNullOp) return;
   Shape<ndim> rshape, rstride;
   diff(small.shape_.get<ndim>(), big.shape_.get<ndim>(), &rshape, &rstride);
+  using nnvm::dim_t;
+  DType* ws_dptr = reinterpret_cast<DType*>(workspace.dptr_);
   int N = small.shape_.Size(), M = rshape.Size();
+  /*
   seq_reduce_compute<Reducer, ndim, DType, OP>(
     N, M, req == kAddTo, big.dptr<DType>(), small.dptr<DType>(), big.shape_.get<ndim>(),
-    small.shape_.get<ndim>(), rshape, rstride);
+    small.shape_.get<ndim>(), rshape, rstride, ws_dptr);
+  */
+/*
+#pragma omp parallel for num_threads(engine::OpenMP::Get()->GetRecommendedOMPThreadCount())
+for (int k = 0; k < M; k++) {
+  Shape<ndim> coord = unravel(k, rshape);
+  ws_dptr[k] = dot(coord, rstride);
+}
+*/
+
+  mxnet_op::Kernel<seq_reduce_kernel<Reducer, ndim, DType, OP>, cpu>::template LaunchEx(
+    s, N, M, req == kAddTo, big.dptr<DType>(), small.dptr<DType>(), big.shape_.get<ndim>(),
+    small.shape_.get<ndim>(), rshape, rstride, ws_dptr);
 }
 
 template<int ndim, typename DType>
@@ -292,13 +382,24 @@ void Reduce(Stream<cpu> *s, const TBlob& small, const OpReqType req,
   diff(small.shape_.get<ndim>(), rhs.shape_.get<ndim>(), &rhs_shape, &rhs_stride);
 
   seq_reduce_compute<Reducer, ndim, DType, OP1, OP2>(
-    N, M, req == kAddTo,
-    big.dptr<DType>(), lhs.dptr<DType>(), rhs.dptr<DType>(), small.dptr<DType>(),
-    big.shape_.get<ndim>(), small.shape_.get<ndim>(),
-    rshape, rstride,
-    lhs_shape, lhs_stride,
-    rhs_shape, rhs_stride,
-    lhs.shape_.get<ndim>(), rhs.shape_.get<ndim>());
+                                           N, M, req == kAddTo,
+                                           big.dptr<DType>(), lhs.dptr<DType>(), rhs.dptr<DType>(), small.dptr<DType>(),
+                                           big.shape_.get<ndim>(), small.shape_.get<ndim>(),
+                                           rshape, rstride,
+                                           lhs_shape, lhs_stride,
+                                           rhs_shape, rhs_stride,
+                                           lhs.shape_.get<ndim>(), rhs.shape_.get<ndim>()
+    );
+  /*
+  mxnet_op::Kernel<seq_reduce_kernel2<Reducer, ndim, DType, OP1, OP2>,
+                   cpu>::template LaunchEx(s, N, M, req == kAddTo,
+                                           big.dptr<DType>(), lhs.dptr<DType>(), rhs.dptr<DType>(), small.dptr<DType>(),
+                                           big.shape_.get<ndim>(), small.shape_.get<ndim>(),
+                                           rshape, rstride,
+                                           lhs_shape, lhs_stride,
+                                           rhs_shape, rhs_stride,
+                                           lhs.shape_.get<ndim>(), rhs.shape_.get<ndim>());
+  */
 }
 
 #endif
