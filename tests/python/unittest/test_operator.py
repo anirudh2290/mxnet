@@ -1314,8 +1314,10 @@ def check_deconvolution_target_shape(input_shape, kernel, stride, pad, adj, targ
     assert out_shapes[0] == (input_shape[0], 5) + target_shape
 
 
+'''
 @unittest.skip("test fails intermittently. temporarily disabled till it gets fixed. tracked at https://github.com/apache/incubator-mxnet/issues/10973")
-@with_seed()
+'''
+@with_seed(1002773977)
 def test_deconvolution():
     # 2D
     check_deconvolution_target_shape(
@@ -1359,6 +1361,7 @@ def test_deconvolution():
         num_filter = 3,
         pad = (1,1)
     )
+    import pdb; pdb.set_trace()
     check_deconvolution_gradient(
         input_shape = (5,3,100,100),
         num_filter = 3,

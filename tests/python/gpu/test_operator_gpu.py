@@ -1923,5 +1923,8 @@ def test_context_num_gpus():
     assert mx.context.num_gpus() > 0
 
 if __name__ == '__main__':
+    """
     import nose
     nose.runmodule()
+    """
+    test_deconvolution()
