@@ -355,10 +355,8 @@ int MXPredCreatePartialOutEx(const char* symbol_json_str,
     input_shape_map[input_name] = TShape(input_shape_data + input_shape_indptr[i],
                                          input_shape_data + input_shape_indptr[i + 1]);
 
-    int dtype = mshadow::kFloat32;
     const auto it = input_dtype_map.find(input_name);
-    if (it != input_dtype_map.end())
-      dtype = input_dtype_map[input_name];
+    int dtype = (it != input_dtype_map.end()) ? input_dtype_map[input_name] : mshadow::kFloat32;
     NDArray nd(input_shape_map[input_name], ctx, false, dtype);
     nd.SyncCopyFromCPU(input_data[i], nd.shape().Size());
     CHECK_EQ(input_nd_map.count(input_name), 0U);
