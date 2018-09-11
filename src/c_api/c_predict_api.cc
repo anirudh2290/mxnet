@@ -269,6 +269,9 @@ int MXPredCreateEx(const char* symbol_json_str,
                    const mx_uint* input_shape_indptr,
                    const mx_uint* input_shape_data,
                    const mx_uint num_input_nodes,
+                   const mx_uint num_provided_input_dtypes,
+                   const char** provided_input_dtype_names,
+                   const int* provided_input_dtypes,
                    PredictorHandle* out) {
   return MXPredCreatePartialOutEx(symbol_json_str,
                                   dev_type,
@@ -278,6 +281,9 @@ int MXPredCreateEx(const char* symbol_json_str,
                                   input_shape_indptr,
                                   input_shape_data,
                                   num_input_nodes,
+                                  num_provided_input_dtypes,
+                                  provided_input_dtype_names,
+                                  provided_input_dtypes,
                                   0,
                                   nullptr,
                                   out);
@@ -290,6 +296,9 @@ int MXPredCreatePartialOutEx(const char* symbol_json_str,
                              const mx_uint* input_shape_indptr,
                              const mx_uint* input_shape_data,
                              const mx_uint num_input_nodes,
+                             const mx_uint num_provided_input_dtypes,
+                             const char** provided_input_dtype_names,
+                             const int* provided_input_dtypes,
                              const mx_uint num_output_nodes,
                              const char** output_keys,
                              PredictorHandle* out) {
@@ -332,12 +341,25 @@ int MXPredCreatePartialOutEx(const char* symbol_json_str,
   Context ctx = Context::Create(static_cast<Context::DeviceType>(dev_type), dev_id);
   std::unordered_map<std::string, TShape> input_shape_map;
   std::unordered_map<std::string, NDArray> input_nd_map;
+
+  // set arg dtypes
+  std::unordered_map<std::string, int> input_dtype_map;
+  input_dtype_map.reserve(num_provided_input_dtypes);
+  for (mx_uint i = 0; i < num_provided_input_dtypes; ++i) {
+    input_dtype_map[provided_input_dtype_names[i]] = provided_input_dtypes[i];
+  }
+
   for (mx_uint i = 0; i < num_input_nodes; ++i) {
     const std::string input_name = input_keys[i];
     CHECK_EQ(input_shape_map.count(input_name), 0U);
     input_shape_map[input_name] = TShape(input_shape_data + input_shape_indptr[i],
                                          input_shape_data + input_shape_indptr[i + 1]);
-    NDArray nd(input_shape_map[input_name], ctx);
+
+    int dtype = mshadow::kFloat32;
+    const auto it = input_dtype_map.find(input_name);
+    if (it != input_dtype_map.end())
+      dtype = input_dtype_map[input_name];
+    NDArray nd(input_shape_map[input_name], ctx, false, dtype);
     nd.SyncCopyFromCPU(input_data[i], nd.shape().Size());
     CHECK_EQ(input_nd_map.count(input_name), 0U);
     input_nd_map.emplace(input_name, nd);
@@ -562,6 +584,7 @@ int MXPredGetOutput(PredictorHandle handle,
       << "Output index out of range";
   const NDArray& nd = p->out_arrays[index];
   nd.SyncCopyToCPU(data, size);
+  LOG(INFO) << "dtype is " << nd.dtype();
   API_END();
 }
 

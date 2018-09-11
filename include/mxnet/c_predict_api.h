@@ -141,6 +141,9 @@ MXNET_DLL int MXPredCreateEx(const char* symbol_json_str,
                              const mx_uint* input_shape_indptr,
                              const mx_uint* input_shape_data,
                              const mx_uint num_input_nodes,
+                             const mx_uint num_provided_input_dtypes,
+                             const char** provided_input_dtype_names,
+                             const int* provided_input_dtypes,
                              PredictorHandle* out);
 /*!
  * \brief Creates a predictor with customized outputs.
@@ -168,6 +171,9 @@ MXNET_DLL int MXPredCreatePartialOutEx(const char* symbol_json_str,
                                        const mx_uint* input_shape_indptr,
                                        const mx_uint* input_shape_data,
                                        const mx_uint num_input_nodes,
+                                       const mx_uint num_provided_input_dtypes,
+                                       const char** provided_input_dtype_names,
+                                       const int* provided_input_dtypes,
                                        const mx_uint num_output_nodes,
                                        const char** output_keys,
                                        PredictorHandle* out);
