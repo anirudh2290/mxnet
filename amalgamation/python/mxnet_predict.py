@@ -28,6 +28,10 @@ import sys
 import ctypes
 import logging
 import numpy as np
+from array import array
+from mxnet.base import NDArrayHandle, c_array_buf
+from mxnet.ndarray import NDArray
+from mxnet.symbol.symbol import _DTYPE_NP_TO_MX
 
 __all__ = ["Predictor", "load_ndarray_file"]
 
@@ -88,7 +92,7 @@ def _check_call(ret):
         raise RuntimeError(py_str(_LIB.MXGetLastError()))
 
 _LIB = _load_lib()
-# type definitions
+#type definitions
 mx_uint = ctypes.c_uint
 mx_float = ctypes.c_float
 mx_float_p = ctypes.POINTER(mx_float)
@@ -96,6 +100,159 @@ PredictorHandle = ctypes.c_void_p
 NDListHandle = ctypes.c_void_p
 
 devstr2type = {'cpu': 1, 'gpu': 2, 'cpu_pinned': 3}
+
+class Predictor2(object):
+    """A predictor class tha runs prediction
+    """
+    def __init__(self, symbol_file,
+                 input_nds, input_names, input_dtypes,
+                 input_shapes, dev_type="cpu",
+                 dev_id=0):
+        dev_type = devstr2type[dev_type]
+        args_handle, args = self._get_ndarray_inputs('input_nds', input_nds, input_names, False)
+        provided_arg_type_data = []
+        for arg_name, arg_type in zip(input_nds, input_dtypes):
+            provided_arg_type_data.append(_DTYPE_NP_TO_MX[np.dtype(arg_type).type])
+        provided_arg_type_data = c_array_buf(ctypes.c_int, array('i', provided_arg_type_data))
+        indptr = [0]
+        sdata = []
+        keys = []
+        handle = PredictorHandle()
+        for v  in input_shapes:
+            sdata.extend(v)
+            print(sdata)
+            indptr.append(len(sdata))
+        print(mx_uint(len(indptr) - 1))
+        for name in input_names:
+            keys.append(c_str(name))
+        _check_call(_LIB.MXPredCreateEx(
+            c_str(symbol_file),
+            ctypes.c_int(dev_type), ctypes.c_int(dev_id),
+            c_array(ctypes.c_char_p, keys),
+            args_handle,
+            provided_arg_type_data,
+            c_array(mx_uint, indptr),
+            c_array(mx_uint, sdata),
+            mx_uint(len(indptr) - 1),
+            ctypes.byref(handle)))
+        self.handle = handle
+
+
+
+    @staticmethod
+    def _get_ndarray_inputs(arg_key, args, arg_names, allow_missing):
+        """Helper function to get NDArray lists handles from various inputs.
+
+        Parameters
+        ----------
+        arg_key : str
+            The name of argument, used for error message.
+
+        args : list of NDArray or dict of str to NDArray
+            Input arguments to the symbols.
+            If type is list of NDArray, the position is in the same order of arg_names.
+            If type is dict of str to NDArray, then it maps the name of arguments
+            to the corresponding NDArray,
+
+        args_names : list of string
+            List of argument names.
+
+        allow_missing : boolean
+            Whether missing argument is allowed.
+            When allowed, the missing handle will be set to None(null)
+
+        Returns
+        -------
+        handles : list of NDArrayHandle
+            The positional list of NDArrayHandles generated from input.
+          """
+        # setup args
+        arg_handles = []
+        arg_arrays = []
+        if isinstance(args, list):
+            if len(args) != len(arg_names):
+                raise ValueError('Length of %s does not match the number of arguments' % arg_key)
+            for narr in args:
+                if narr is None and allow_missing:
+                    arg_handles.append(None)
+                elif not isinstance(narr, NDArray):
+                    raise TypeError('Only accept list of NDArrays or dict of str to NDArray')
+                else:
+                    arg_handles.append(narr.handle)
+            arg_arrays = args
+        elif isinstance(args, dict):
+            for name in arg_names:
+                if name in args:
+                    narr = args[name]
+                    if not isinstance(narr, NDArray):
+                        raise TypeError('Only accept list of NDArrays or dict of str to NDArray')
+                    arg_handles.append(narr.handle)
+                    arg_arrays.append(narr)
+                else:
+                    if allow_missing:
+                        arg_handles.append(None)
+                        arg_arrays.append(None)
+                    else:
+                        raise ValueError('key `%s` is missing in `%s`' % (name, arg_key))
+        else:
+            raise TypeError('Only accept list of NDArrays or dict of str to NDArray')
+        return c_array(NDArrayHandle, arg_handles), arg_arrays
+
+    def __del__(self):
+        _check_call(_LIB.MXPredFreeEx(self.handle))
+
+    def forward(self, **kwargs):
+        """Perform forward to get the output.
+
+        Parameters
+        ----------
+        **kwargs
+            Keyword arguments of input variable name to data.
+
+        Examples
+        --------
+        >>> predictor.forward(data=mydata)
+        >>> out = predictor.get_output(0)
+        """
+        for k, v in kwargs.items():
+            if not isinstance(v, np.ndarray):
+                raise ValueError("Expect numpy ndarray as input")
+            v = np.ascontiguousarray(v, dtype=np.float32)
+            _check_call(_LIB.MXPredSetInput(
+                self.handle, c_str(k),
+                v.ctypes.data_as(mx_float_p),
+                mx_uint(v.size)))
+        _check_call(_LIB.MXPredForward(self.handle))
+
+    def get_output(self, index):
+        """Get the index-th output.
+
+        Parameters
+        ----------
+        index : int
+            The index of output.
+
+        Returns
+        -------
+        out : numpy array.
+            The output array.
+        """
+        pdata = ctypes.POINTER(mx_uint)()
+        ndim = mx_uint()
+        _check_call(_LIB.MXPredGetOutputShape(
+            self.handle, index,
+            ctypes.byref(pdata),
+            ctypes.byref(ndim)))
+        shape = tuple(pdata[:ndim.value])
+        data = np.empty(shape, dtype=np.float32)
+        _check_call(_LIB.MXPredGetOutput(
+            self.handle, mx_uint(index),
+            data.ctypes.data_as(mx_float_p),
+            mx_uint(data.size)))
+        return data
+
+
+
 
 class Predictor(object):
     """A predictor class that runs prediction.
@@ -117,6 +274,7 @@ class Predictor(object):
     dev_id : int, optional
         The device id of the predictor.
     """
+
     def __init__(self, symbol_file,
                  param_raw_bytes, input_shapes,
                  dev_type="cpu", dev_id=0):

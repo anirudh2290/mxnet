@@ -49,6 +49,9 @@ typedef float mx_float;
 typedef void *PredictorHandle;
 /*! \brief handle to NDArray list */
 typedef void *NDListHandle;
+  struct NDListHandleEx {
+            void *ptr;
+              };
 
 /*!
  * \brief Get the last error happeneed.
@@ -84,7 +87,15 @@ MXNET_DLL int MXPredCreate(const char* symbol_json_str,
                            const mx_uint* input_shape_indptr,
                            const mx_uint* input_shape_data,
                            PredictorHandle* out);
-
+  MXNET_DLL int MXPredCreateEx(const char* symbol_json_str,
+                               int dev_type, int dev_id,
+                               const char** input_keys,
+                               const void** input_data,
+                               const int* input_dtypes,
+                               const mx_uint* input_shape_indptr,
+                               const mx_uint* input_shape_data,
+                               const mx_uint num_input_nodes,
+                               PredictorHandle* out);
 /*!
  * \brief create a predictor wich customized outputs
  * \param symbol_json_str The JSON string of the symbol.
@@ -119,6 +130,18 @@ MXNET_DLL int MXPredCreatePartialOut(const char* symbol_json_str,
                                      mx_uint num_output_nodes,
                                      const char** output_keys,
                                      PredictorHandle* out);
+
+  MXNET_DLL int MXPredCreatePartialOutEx(const char* symbol_json_str,
+                                         int dev_type, int dev_id,
+                                         const char** input_keys,
+                                         const void** input_data,
+                                         const int* input_dtypes,
+                                         const mx_uint* input_shape_indptr,
+                                         const mx_uint* input_shape_data,
+                                         const mx_uint num_input_nodes,
+                                         const mx_uint num_output_nodes,
+                                         const char** output_keys,
+                                         PredictorHandle* out);
 /*!
  * \brief Change the input shape of an existing predictor.
  * \param num_input_nodes Number of input nodes to the net,
@@ -207,6 +230,7 @@ MXNET_DLL int MXPredGetOutput(PredictorHandle handle,
  * \return 0 when success, -1 when failure.
  */
 MXNET_DLL int MXPredFree(PredictorHandle handle);
+MXNET_DLL int MXPredFreeEx(PredictorHandle handle);
 /*!
  * \brief Create a NDArray List by loading from ndarray file.
  *     This can be used to load mean image file.
@@ -220,6 +244,11 @@ MXNET_DLL int MXNDListCreate(const char* nd_file_bytes,
                              int nd_file_size,
                              NDListHandle *out,
                              mx_uint* out_length);
+
+  MXNET_DLL int MXNDListCreateEx(const char* nd_file_bytes,
+                                 int nd_file_size,
+                                 NDListHandleEx *out,
+                                 mx_uint* out_length);
 /*!
  * \brief Get an element from list
  * \param handle The handle to the NDArray
@@ -236,12 +265,22 @@ MXNET_DLL int MXNDListGet(NDListHandle handle,
                           const mx_float** out_data,
                           const mx_uint** out_shape,
                           mx_uint* out_ndim);
+
+  MXNET_DLL int MXNDListGetEx(NDListHandleEx handle,
+                              mx_uint index,
+                              const char** out_key,
+                              const void** out_data,
+                              int* out_dtype,
+                              const mx_uint** out_shape,
+                              mx_uint* out_ndim);
 /*!
  * \brief Free a MXAPINDList
  * \param handle The handle of the MXAPINDList.
  * \return 0 when success, -1 when failure.
  */
 MXNET_DLL int MXNDListFree(NDListHandle handle);
+
+MXNET_DLL int MXNDListFreeEx(NDListHandleEx handle);
 
 #ifdef __cplusplus
 }

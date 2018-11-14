@@ -19,7 +19,7 @@ from __future__ import print_function
 import sys, os
 curr_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))
 sys.path.append(os.path.join(curr_path, "../../../amalgamation/python/"))
-from mxnet_predict import Predictor, load_ndarray_file
+from mxnet_predict import Predictor, Predictor2, load_ndarray_file
 
 import numpy as np
 import mxnet as mx
@@ -81,7 +81,22 @@ def test_load_ndarray():
     for k in nd_data.keys():
         assert_almost_equal(nd_data[k].asnumpy(), nd_load[k], rtol=1e-5, atol=1e-6)
 
+def test_predictor2():
+    x = mx.sym.var("x")
+    z = mx.sym.exp(x)
+    z.save("exp-symbol.json")
+    x1 = mx.nd.array([[1, 2]])
+    x2 = mx.nd.array([[2, 3]])
+    predictor = Predictor2(open("exp-symbol.json", "r").read(), {'x': x1}, ['x'], ['float32'], [x1.shape])
+    predictor.forward(x=x2.asnumpy())
+    predictor_out1 = predictor.get_output(0)
+    print(predictor_out1)
+    del predictor
+
 
 if __name__ == '__main__':
+    '''
     import nose
     nose.runmodule()
+    '''
+    test_predictor2()
