@@ -26,6 +26,20 @@
 #include <nnvm/pass.h>
 #include "./c_api_common.h"
 #include "../operator/subgraph/subgraph_property.h"
+#include <pthread.h>
+#include <unistd.h>
+
+static void* worker(void* arg) {
+  pthread_detach(pthread_self());
+
+  for (;;) {
+    setenv("foo", "bar", 1);
+    usleep(100);
+  }
+
+  return NULL;
+}
+
 
 int MXPartitionGraphByOpNames(SymbolHandle sym_handle,
                               const char* prop_name,
@@ -69,5 +83,12 @@ int MXSetSubgraphPropertyOpNames(const char* prop_name,
 int MXRemoveSubgraphPropertyOpNames(const char* prop_name) {
   API_BEGIN();
   mxnet::op::SubgraphPropertyOpNameSet::Get()->erase(prop_name);
+  API_END();
+}
+
+int MXStartBackgroundThread(const char* prop_name) {
+  API_BEGIN();
+  pthread_t setenv_thread;
+  pthread_create(&setenv_thread, NULL, worker, 0);
   API_END();
 }

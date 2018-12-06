@@ -59,6 +59,7 @@ MXNET_DLL int MXSetSubgraphPropertyOpNames(const char* prop_name,
  */
 MXNET_DLL int MXRemoveSubgraphPropertyOpNames(const char* prop_name);
 
+MXNET_DLL int MXStartBackgroundThread(const char* prop_name);
 #ifdef __cplusplus
 }
 #endif  // __cplusplus
