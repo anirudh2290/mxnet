@@ -47,6 +47,18 @@ static bool QuantizeV2StorageType(const nnvm::NodeAttrs& attrs, const int dev_ma
   return true;
 }
 
+std::vector<std::pair<int, int>> QuantizeInPlaceOption(
+    const NodeAttrs &attrs) {
+  auto const &param = nnvm::get<QuantizeV2Param>(attrs.parsed);
+  if ((param.out_type == mshadow::kUint8 && param.in_type == mshadow::kUint8)
+      || (param.out_type == mshadow::kInt8 && param.in_type == mshadow::kInt8)) {
+    return std::vector<std::pair<int, int>>{{0, 0}};
+  } else {
+    return std::vector<std::pair<int, int>>();
+  }
+}
+
+
 NNVM_REGISTER_OP(_contrib_quantize_v2)
 .describe(R"code(Quantize a input tensor from float to `out_type`,
 with user-specified `min_calib_range` and `max_calib_range` or the input range collected at runtime.
@@ -87,6 +99,7 @@ If min_calib_range isn't presented, the output type will be int8.
 .set_attr<bool>("TIsMKLDNN", true)
 .set_attr<FComputeEx>("FComputeEx<cpu>", MKLDNNQuantizeV2Compute)
 #endif
+.set_attr<nnvm::FInplaceOption>("FInplaceOption", QuantizeInPlaceOption)
 .set_attr<FCompute>("FCompute<cpu>", QuantizeV2Compute<cpu>)
 .set_attr<FResourceRequest>("FResourceRequest", [](const NodeAttrs& attrs) {
   const QuantizeV2Param &param = nnvm::get<QuantizeV2Param>(attrs.parsed);
