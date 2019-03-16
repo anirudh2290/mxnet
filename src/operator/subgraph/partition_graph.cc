@@ -45,7 +45,7 @@ using nnvm::NodePtr;
 using nnvm::NodeEntry;
 using nnvm::Graph;
 
-#define DEBUG_SUBGRAPH 0
+#define DEBUG_SUBGRAPH 1
 
 namespace sg {  // sg stands for subgraph
 
@@ -77,6 +77,7 @@ struct SimpleNode {
 #if DEBUG_SUBGRAPH
 void PrintSubgraph(const std::vector<SimpleNode*>& simple_nodes) {
   std::string op_names = "";
+  LOG(INFO) << "Inside PrintSubgraph";
   for (size_t i = 0; i < simple_nodes.size(); ++i) {
     op_names += simple_nodes[i]->node->attrs.name + ' ';
   }

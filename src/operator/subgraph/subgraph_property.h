@@ -177,7 +177,13 @@ class SubgraphPropertyRegistry {
   }
 
   SubgraphPropertyCreateFn __REGISTER__(const std::string& name, SubgraphPropertyCreateFn fn) {
+    LOG(INFO) << "Inside register, name is " << name;
     prop_fn_map_[name].push_back(fn);
+    auto it = prop_fn_map_.find(name);
+    
+    CHECK(it != prop_fn_map_.end()) << "SubgraphProperty " << name
+                                    << " is not found in SubgraphPropertyRegistry";
+    LOG(INFO) << it->second.size();
     return fn;
   }
 

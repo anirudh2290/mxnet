@@ -21,6 +21,7 @@
 
 #include "mkldnn_conv_property.h"
 #include "mkldnn_post_quantize_conv_property.h"
+#include "../additional.h"
 
 namespace mxnet {
 namespace op {

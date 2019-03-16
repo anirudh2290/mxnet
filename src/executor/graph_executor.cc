@@ -1571,7 +1571,9 @@ static nnvm::Symbol PartitionGraph(const nnvm::Symbol& src,
   }
   std::vector<mxnet::op::SubgraphPropertyPtr> properties =
       op::SubgraphPropertyRegistry::Get()->CreateSubgraphProperty(prop_name);
+  LOG(INFO) << "lenght of properties is " << properties.size();
   for (auto subgraph_prop : properties) {
+    LOG(INFO) << "Inside subgraph prop " << prop_name; 
     if (subgraph_prop->HasAttr("inference_only") &&
         subgraph_prop->GetAttr<bool>("inference_only") == true) {
       if (need_grad) {

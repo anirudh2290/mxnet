@@ -20,6 +20,7 @@
 #include "./common.h"
 #include "./subgraph_property.h"
 #include "../../imperative/cached_op.h"
+#include "./additional.h"
 
 namespace mxnet {
 namespace op {
