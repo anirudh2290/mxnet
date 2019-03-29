@@ -43,16 +43,16 @@ class PoolMemoryProfiler {
    * \brief Called when memory allocated from pool
    * \param handle
    */
-  void OnPoolHit(const Storage::Handle &handle, bool hit) {
+  void OnPoolHit(const Storage::Handle &handle, bool hit, size_t size) {
     profiler::Profiler *prof = profiler::Profiler::Get();
     if (prof->IsProfiling(profiler::Profiler::kMemory)) {
       Init();
       const size_t idx = prof->DeviceIndex(handle.ctx.dev_type, handle.ctx.dev_id);
       CHECK_LT(idx, mem_counters_pool_hit_.size()) << "Invalid device index: " << idx;
       if (hit) {
-        *mem_counters_pool_hit_[idx] += 1;
+        *mem_counters_pool_hit_[idx] += size;
       } else {
-        *mem_counters_pool_miss_[idx] += 1;
+        *mem_counters_pool_miss_[idx] += size;
       }
     }
   }
@@ -64,6 +64,7 @@ class PoolMemoryProfiler {
       const size_t idx = prof->DeviceIndex(handle.ctx.dev_type, handle.ctx.dev_id);
       CHECK_LT(idx, mem_counters_pool_used_.size()) << "Invalid device index: " << idx;
       *mem_counters_pool_used_[idx] += used_size;
+      //*mem_counters_pool_total_[idx] += used_size;
     }
   }
 
@@ -115,6 +116,7 @@ class PoolMemoryProfiler {
           } else {
             *mem_counters_pool_free_[idx] -= free_size;
           }
+          //*mem_counters_pool_total_[idx] = 0;
       }
   }
 
@@ -136,12 +138,13 @@ class PoolMemoryProfiler {
          mem_counters_pool_free_.reserve(device_count);
          mem_counters_pool_total_.reserve(device_count);
          for (size_t i = 0, n = device_count; i < n; ++i) {
-           std::string name = "Pool Memory: ";
+           std::string name = "Pool:";
            name += prof->DeviceName(i);
-           std::string pool_hits = name + " Pool Hits";
-           std::string pool_misses = name + " Pool Misses";
+           std::string pool_hits = name + " Total Alloc'ed from Pool";
+           std::string pool_misses = name + " Total Alloc'ed with CUDA";
            std::string pool_used = name + " Pool Used";
            std::string pool_free = name + " Pool Free";
+           std::string pool_total = name + " Pool Total";
            mem_counters_pool_hit_.emplace_back(
                std::make_shared<profiler::ProfileCounter>(pool_hits.c_str(),
                                                           &domain_));
@@ -154,6 +157,11 @@ class PoolMemoryProfiler {
            mem_counters_pool_free_.emplace_back(
                std::make_shared<profiler::ProfileCounter>(pool_free.c_str(),
                                                           &domain_));
+           /*
+           mem_counters_pool_total_.emplace_back(
+               std::make_shared<profiler::ProfileCounter>(pool_total.c_str(),
+                                                          &domain_));
+           */
          }
        }
      }

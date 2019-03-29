@@ -56,7 +56,7 @@ class GPUPooledStorageManager final : public StorageManager {
   /*!
    * \brief Default constructor.
    */
-  GPUPooledStorageManager() {
+  explicit GPUPooledStorageManager(Context initial_context) : initial_context_(initial_context) {
     reserve_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_RESERVE", 5);
     page_size_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_PAGE_SIZE", 4096);
     large_alloc_round_size_ = dmlc::GetEnv("MXNET_GPU_MEM_LARGE_ALLOC_ROUND_SIZE", 2 * 1024 * 1024);
@@ -125,6 +125,8 @@ class GPUPooledStorageManager final : public StorageManager {
   int reserve_;
   // number of devices
   const size_t NDEV = 32;
+  // context used by Storage manager
+  const Context initial_context_;
   // memory pool
   std::unordered_map<size_t, std::vector<void*>> memory_pool_;
   DISALLOW_COPY_AND_ASSIGN(GPUPooledStorageManager);
@@ -156,14 +158,14 @@ void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
     used_memory_ += size;
     handle->dptr = ret;
     pool_profiler_.OnAllocate(*handle, size);
-    pool_profiler_.OnPoolHit(*handle, false);
+    pool_profiler_.OnPoolHit(*handle, false, size);
   } else {
     auto&& reuse_pool = reuse_it->second;
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
     handle->dptr = ret;
     pool_profiler_.OnPoolAllocate(*handle, size);
-    pool_profiler_.OnPoolHit(*handle, true);
+    pool_profiler_.OnPoolHit(*handle, true, size);
   }
 }
 
@@ -185,6 +187,7 @@ void GPUPooledStorageManager::ReleaseAll(bool destructing) {
       Storage::Handle handle;
       handle.dptr = j;
       handle.size = i.first;
+      handle.ctx = initial_context_;
       if (!destructing)
         pool_profiler_.OnFree(handle, i.first);
       DirectFreeNoLock(handle);
@@ -212,7 +215,7 @@ class GPUPooledRoundedStorageManager final : public StorageManager {
   /*!
    * \brief Default constructor.
    */
-  GPUPooledRoundedStorageManager() {
+  explicit GPUPooledRoundedStorageManager(Context initial_context) : initial_context_(initial_context) {
     reserve_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_RESERVE", 5);
     page_size_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_PAGE_SIZE", 4096);
     cut_off_ = dmlc::GetEnv("MXNET_GPU_MEM_POOL_ROUND_LINEAR_CUTOFF", 24);
@@ -300,6 +303,8 @@ class GPUPooledRoundedStorageManager final : public StorageManager {
   size_t cut_off_;
   // percentage of reserved memory
   int reserve_;
+  // context used by this Storage Manager
+  const Context initial_context_;
   // memory pool
   std::vector<std::vector<void*>> memory_pool_;
   DISALLOW_COPY_AND_ASSIGN(GPUPooledRoundedStorageManager);
@@ -332,13 +337,13 @@ void GPUPooledRoundedStorageManager::Alloc(Storage::Handle* handle) {
     used_memory_ += size;
     handle->dptr = ret;
     pool_profiler_.OnAllocate(*handle, size);
-    pool_profiler_.OnPoolHit(*handle, false);
+    pool_profiler_.OnPoolHit(*handle, false, size);
   } else {
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
     handle->dptr = ret;
     pool_profiler_.OnPoolAllocate(*handle, size);
-    pool_profiler_.OnPoolHit(*handle, true);
+    pool_profiler_.OnPoolHit(*handle, true, size);
   }
 }
 
@@ -362,6 +367,7 @@ void GPUPooledRoundedStorageManager::ReleaseAll(bool destructing) {
       Storage::Handle handle;
       handle.size = size;
       handle.dptr = j;
+      handle.ctx = initial_context_;
       if (!destructing)
         pool_profiler_.OnFree(handle, size);
       DirectFreeNoLock(handle);
