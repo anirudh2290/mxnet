@@ -614,6 +614,38 @@ struct ProfileCounter : public ProfileObject {
     return *this;
   }
 
+  inline bool operator >=(int64_t v) {
+    if (value_ >= static_cast<uint64_t>(v)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  inline bool operator >=(size_t v) {
+    if (value_ >= static_cast<uint64_t>(v)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  inline bool operator <=(int64_t v) {
+    if (value_ <= static_cast<uint64_t>(v)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  inline bool operator <=(size_t v) {
+    if (value_ <= static_cast<uint64_t>(v)) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
   ProfileObjectType type() const override { return kCounter; }
 
  protected:

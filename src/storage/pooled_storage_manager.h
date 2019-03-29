@@ -39,6 +39,8 @@
 #include "./storage_manager.h"
 #include "../common/cuda_utils.h"
 #include "../common/utils.h"
+#include "../profiler/storage_profiler.h"
+#include "../profiler/pool_memory_profiler.h"
 
 
 namespace mxnet {
@@ -71,7 +73,7 @@ class GPUPooledStorageManager final : public StorageManager {
    * \brief Default destructor.
    */
   ~GPUPooledStorageManager() {
-    ReleaseAll();
+    ReleaseAll(true);
   }
 
   void Alloc(Storage::Handle* handle) override;
@@ -112,7 +114,7 @@ class GPUPooledStorageManager final : public StorageManager {
   }
 
  private:
-  void ReleaseAll();
+  void ReleaseAll(bool destructing = false);
   // used memory
   size_t used_memory_ = 0;
   // page size
@@ -126,6 +128,7 @@ class GPUPooledStorageManager final : public StorageManager {
   // memory pool
   std::unordered_map<size_t, std::vector<void*>> memory_pool_;
   DISALLOW_COPY_AND_ASSIGN(GPUPooledStorageManager);
+  PoolMemoryProfiler pool_profiler_;
 };  // class GPUPooledStorageManager
 
 void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
@@ -152,11 +155,15 @@ void GPUPooledStorageManager::Alloc(Storage::Handle* handle) {
     }
     used_memory_ += size;
     handle->dptr = ret;
+    pool_profiler_.OnAllocate(*handle, size);
+    pool_profiler_.OnPoolHit(*handle, false);
   } else {
     auto&& reuse_pool = reuse_it->second;
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
     handle->dptr = ret;
+    pool_profiler_.OnPoolAllocate(*handle, size);
+    pool_profiler_.OnPoolHit(*handle, true);
   }
 }
 
@@ -169,14 +176,17 @@ void GPUPooledStorageManager::Free(Storage::Handle handle) {
   size_t size = RoundAllocSize(handle.size);
   auto&& reuse_pool = memory_pool_[size];
   reuse_pool.push_back(handle.dptr);
+  pool_profiler_.OnPoolFree(handle, size);
 }
 
-void GPUPooledStorageManager::ReleaseAll() {
+void GPUPooledStorageManager::ReleaseAll(bool destructing) {
   for (auto&& i : memory_pool_) {
     for (auto&& j : i.second) {
       Storage::Handle handle;
       handle.dptr = j;
       handle.size = i.first;
+      if (!destructing)
+        pool_profiler_.OnFree(handle, i.first);
       DirectFreeNoLock(handle);
     }
   }
@@ -230,7 +240,7 @@ class GPUPooledRoundedStorageManager final : public StorageManager {
    * \brief Default destructor.
    */
   ~GPUPooledRoundedStorageManager() {
-    ReleaseAll();
+    ReleaseAll(true);
   }
 
   void Alloc(Storage::Handle* handle) override;
@@ -275,7 +285,7 @@ class GPUPooledRoundedStorageManager final : public StorageManager {
   }
 
  private:
-  void ReleaseAll();
+  void ReleaseAll(bool destructing = false);
   // number of devices
   const int NDEV = 32;
   // log2 of maximum page size. 16GB
@@ -293,6 +303,7 @@ class GPUPooledRoundedStorageManager final : public StorageManager {
   // memory pool
   std::vector<std::vector<void*>> memory_pool_;
   DISALLOW_COPY_AND_ASSIGN(GPUPooledRoundedStorageManager);
+  PoolMemoryProfiler pool_profiler_;
 };  // class GPUPooledRoundedStorageManager
 
 void GPUPooledRoundedStorageManager::Alloc(Storage::Handle* handle) {
@@ -320,10 +331,14 @@ void GPUPooledRoundedStorageManager::Alloc(Storage::Handle* handle) {
     }
     used_memory_ += size;
     handle->dptr = ret;
+    pool_profiler_.OnAllocate(*handle, size);
+    pool_profiler_.OnPoolHit(*handle, false);
   } else {
     auto ret = reuse_pool.back();
     reuse_pool.pop_back();
     handle->dptr = ret;
+    pool_profiler_.OnPoolAllocate(*handle, size);
+    pool_profiler_.OnPoolHit(*handle, true);
   }
 }
 
@@ -334,19 +349,24 @@ void GPUPooledRoundedStorageManager::Free(Storage::Handle handle) {
 
   std::lock_guard<std::mutex> lock(Storage::Get()->GetMutex(Context::kGPU));
   int bucket = get_bucket(handle.size);
+  size_t size = get_size(bucket);
   auto&& reuse_pool = memory_pool_[bucket];
   reuse_pool.push_back(handle.dptr);
+  pool_profiler_.OnPoolFree(handle, size);
 }
 
-void GPUPooledRoundedStorageManager::ReleaseAll() {
+void GPUPooledRoundedStorageManager::ReleaseAll(bool destructing) {
   for (size_t i = 0; i < memory_pool_.size(); i++) {
     int size = get_size(i);
     for (auto& j : memory_pool_[i]) {
       Storage::Handle handle;
       handle.size = size;
       handle.dptr = j;
+      if (!destructing)
+        pool_profiler_.OnFree(handle, size);
       DirectFreeNoLock(handle);
     }
+    //profiler_.OnFree(handle, size * memory_pool_[i].size());
     memory_pool_[i].clear();
   }
 }
