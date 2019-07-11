@@ -22,6 +22,7 @@ https://github.com/d2l-ai/d2l-en/blob/master/chapter_natural-language-processing
 
 import argparse
 import os
+import sys
 import tarfile
 import random
 import collections
@@ -30,6 +31,9 @@ from mxnet import nd, gluon
 from mxnet.contrib import text
 from mxnet.gluon import nn, rnn
 from mxnet.gluon.contrib.estimator import estimator
+curr_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))
+sys.path.insert(0, os.path.join(curr_path, '../../python/unittest'))
+from common import with_seed
 
 
 class TextCNN(nn.Block):
@@ -232,6 +236,9 @@ def test_estimator_cpu(**kwargs):
         run(net, train_dataloader, val_dataloader, **kwargs)
 
 
+# Model
+# using fixed seed to reduce flakiness in accuracy assertion
+@with_seed(7)
 def test_estimator_gpu(**kwargs):
     '''
     Test estimator by training Bidirectional RNN for 5 epochs on the IMDB dataset
@@ -252,9 +259,6 @@ def test_estimator_gpu(**kwargs):
     train_dataloader = gluon.data.DataLoader(train_set, batch_size, shuffle=True)
     test_dataloader = gluon.data.DataLoader(test_set, batch_size)
 
-    # Model
-    # using fixed seed to reduce flakiness in accuracy assertion
-    mx.random.seed(7)
     num_hiddens, num_layers = 100, 2
     net = BiRNN(vocab, embed_size, num_hiddens, num_layers)
     net.initialize(mx.init.Xavier(), ctx=ctx)
