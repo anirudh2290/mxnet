@@ -1246,11 +1246,12 @@ MXNET_DLL int MXCreateCachedOpEx(SymbolHandle handle,
                                  int num_flags,
                                  const char** keys,
                                  const char** vals,
-                                 CachedOpHandle *out);
+                                 CachedOpHandle *out,
+                                 bool thread_safe = false);
 /*!
  * \brief free cached operator
  */
-MXNET_DLL int MXFreeCachedOp(CachedOpHandle handle);
+MXNET_DLL int MXFreeCachedOp(CachedOpHandle handle, bool thread_safe = false);
 /*!
  * \brief invoke cached operator
  */
@@ -1274,7 +1275,8 @@ MXNET_DLL int MXInvokeCachedOpEx(CachedOpHandle handle,
                                  NDArrayHandle *inputs,
                                  int *num_outputs,
                                  NDArrayHandle **outputs,
-                                 const int** out_stypes);
+                                 const int** out_stypes,
+                                 bool thread_safe = false);
 
 /*!
  * \brief cached op set monitor callback

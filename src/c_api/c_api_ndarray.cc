@@ -170,7 +170,8 @@ int MXCreateCachedOpEx(SymbolHandle handle,
                        int num_flags,
                        const char** keys,
                        const char** vals,
-                       CachedOpHandle *out) {
+                       CachedOpHandle *out,
+                       bool thread_safe) {
   nnvm::Symbol* sym = static_cast<nnvm::Symbol*>(handle);
 
   API_BEGIN();
@@ -182,7 +183,7 @@ int MXCreateCachedOpEx(SymbolHandle handle,
   API_END();
 }
 
-int MXFreeCachedOp(CachedOpHandle handle) {
+int MXFreeCachedOp(CachedOpHandle handle, bool thread_safe) {
   CachedOpPtr* g = static_cast<CachedOpPtr*>(handle);
   API_BEGIN();
   delete g;
@@ -237,7 +238,8 @@ int MXInvokeCachedOpEx(CachedOpHandle handle,
                        NDArrayHandle *inputs,
                        int *num_outputs,
                        NDArrayHandle **outputs,
-                       const int **out_stypes) {  // outputs storage types
+                       const int **out_stypes,
+                       bool thread_safe) {  // outputs storage types
   MXAPIThreadLocalEntry<> *ret = MXAPIThreadLocalStore<>::Get();
   int err = MXInvokeCachedOp(handle, num_inputs, inputs, num_outputs, outputs);
   if (err != 0) return err;
