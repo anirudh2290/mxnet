@@ -119,11 +119,12 @@ def _imperative_invoke(handle, ndargs, keys, vals, out, is_np_op):
 
 class CachedOp(object):
     """Cached operator handle."""
-    __slots__ = ["handle", "is_np_sym", "_monitor_callback"]
+    __slots__ = ["handle", "is_np_sym", "_monitor_callback", "thread_safe"]
 
     def __init__(self, sym, flags=()):
         self.handle = CachedOpHandle()
         self._monitor_callback = None
+        self.thread_safe = thread_safe
 
         from ..symbol.numpy._symbol import _Symbol
         self.is_np_sym = bool(isinstance(sym, _Symbol))
@@ -133,10 +134,11 @@ class CachedOp(object):
             len(flags),
             c_str_array([key for key, _ in flags]),
             c_str_array([str(val) for _, val in flags]),
-            ctypes.byref(self.handle)))
+            ctypes.byref(self.handle),
+            self.thread_safe))
 
     def __del__(self):
-        check_call(_LIB.MXFreeCachedOp(self.handle))
+        check_call(_LIB.MXFreeCachedOp(self.handle, self.thread_safe))
 
     def __call__(self, *args, **kwargs):
         """ctypes implementation of imperative invoke wrapper"""
@@ -167,7 +169,8 @@ class CachedOp(object):
             c_handle_array(args),
             ctypes.byref(num_output),
             ctypes.byref(output_vars),
-            ctypes.byref(out_stypes)))
+            ctypes.byref(out_stypes),
+            self.thread_safe))
 
         if original_output is not None:
             return original_output
