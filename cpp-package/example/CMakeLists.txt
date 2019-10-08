@@ -74,3 +74,7 @@ add_dependencies(resnet ${CPPEX_DEPS})
 add_executable(multithreading_engine_push_mxnet_op multithreading_engine_push_mxnet_op.cpp ${CPP_PACKAGE_HEADERS})
 target_link_libraries(multithreading_engine_push_mxnet_op ${CPP_EXAMPLE_LIBS})
 add_dependencies(multithreading_engine_push_mxnet_op ${CPPEX_DEPS})
+
+add_executable(multithreading_engine_push_cached_op multithreading_engine_push_cached_op.cpp ${CPP_PACKAGE_HEADERS})
+target_link_libraries(multithreading_engine_push_cached_op ${CPP_EXAMPLE_LIBS})
+add_dependencies(multithreading_engine_push_cached_op ${CPPEX_DEPS})

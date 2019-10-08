@@ -12,6 +12,7 @@
 #include <vector>
 #include "utils.h"
 #include "mxnet-cpp/MxNetCpp.h"
+
 using namespace mxnet::cpp;
 
 int main(int argc, char const *argv[]) {
@@ -19,13 +20,13 @@ int main(int argc, char const *argv[]) {
     int num_threads = atoi(argv[1]);
     std::string input_ctx = std::string(argv[2]);
     mxnet::cpp::Context ctx = mxnet::cpp::Context::cpu();
-    Context backend_ctx;
+    mxnet::Context backend_ctx;
     if (input_ctx == "cpu") {
       ctx = mxnet::cpp::Context::cpu();
-      backend_ctx = Context::CPU(0);
+      backend_ctx = mxnet::Context::CPU(0);
     } else {
       ctx = mxnet::cpp::Context::gpu(0);
-      backend_ctx = Context::GPU(0);
+      backend_ctx = mxnet::Context::GPU(0);
     }
 
     Symbol data = Symbol::Variable("data");
