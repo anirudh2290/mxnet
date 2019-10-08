@@ -128,10 +128,11 @@ FCompType GetFCompute(const nnvm::Op* op, const std::string& name,
 
 int main(int argc, char const *argv[]) {
   /*Input data preparation*/
-  CHECK(argc == 3) << "One argument expected : num_threads";
+  CHECK(argc == 2) << "One argument expected : num_threads";
   int num_threads = atoi(argv[1]);
-  std::string input_ctx = std::string(argv[2]);
-  CHECK(input_ctx == "cpu") << "Bad input, only cpu context supported currently";
+  //std::string input_ctx = std::string(argv[2]);
+  std::string input_ctx = "cpu";
+  //CHECK(input_ctx == "cpu") << "Bad input, only cpu context supported currently";
   mxnet::cpp::Context ctx = mxnet::cpp::Context::cpu();
   Context backend_ctx;
   if (input_ctx == "cpu") {
@@ -166,8 +167,8 @@ int main(int argc, char const *argv[]) {
     weight_arr.emplace_back(mxnet::cpp::Shape(10, 4, 2, 2), ctx, false, 0);
     bias_arr.emplace_back(mxnet::cpp::Shape(10), ctx, false, 0);
     output_arr.emplace_back(mxnet::cpp::Shape(2, 10, 9, 9), ctx, false, 0);
-    int begin = 0;
-    int end = 1000;
+    int begin = 1000 * i;
+    int end = begin + 1000;
     mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(data_arr[i]);
     mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(weight_arr[i]);
     mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(bias_arr[i]);
