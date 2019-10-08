@@ -411,9 +411,11 @@ int MXPredCreateMultiThread(const char* symbol_json_str,
   std::string stype;
   if (type)
     stype = type;
+  /*
   CHECK(stype == "NaiveEngine") << "Multithread inference only works with NaiveEngine.\n"
       << "Please set MXNET_ENGINE_TYPE to NaiveEngine"
       << std::endl;
+  */
   return _CreatePartialOut(
       symbol_json_str,
       param_bytes,
