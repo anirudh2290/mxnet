@@ -128,6 +128,19 @@ FCompType GetFCompute(const nnvm::Op* op, const std::string& name,
 
 int main(int argc, char const *argv[]) {
   /*Input data preparation*/
+  CHECK(argc == 3) << "One argument expected : num_threads";
+  int num_threads = atoi(argv[1]);
+  std::string input_ctx = std::string(argv[2]);
+  CHECK(input_ctx == "cpu") << "Bad input, only cpu context supported currently";
+  mxnet::cpp::Context ctx = mxnet::cpp::Context::cpu();
+  Context backend_ctx;
+  if (input_ctx == "cpu") {
+      ctx = mxnet::cpp::Context::cpu();
+      backend_ctx = Context::CPU(0);
+  } else {
+      ctx = mxnet::cpp::Context::gpu(0);
+      backend_ctx = Context::GPU(0);
+  }
   const nnvm::Op *op = Op::Get("Convolution");
   nnvm::NodeAttrs attrs;
   attrs.op = op;
@@ -148,12 +161,11 @@ int main(int argc, char const *argv[]) {
   std::vector<mxnet::cpp::NDArray> weight_arr;
   std::vector<mxnet::cpp::NDArray> bias_arr;
   std::vector<mxnet::cpp::NDArray> output_arr;
-  int num_threads = 5;
   for (size_t i = 0; i < num_threads; ++i) {
-    data_arr.emplace_back(mxnet::cpp::Shape(2, 4, 10, 10), mxnet::cpp::Context::cpu(), false, 0);
-    weight_arr.emplace_back(mxnet::cpp::Shape(10, 4, 2, 2), mxnet::cpp::Context::cpu(), false, 0);
-    bias_arr.emplace_back(mxnet::cpp::Shape(10), mxnet::cpp::Context::cpu(), false, 0);
-    output_arr.emplace_back(mxnet::cpp::Shape(2, 10, 9, 9), mxnet::cpp::Context::cpu(), false, 0);
+    data_arr.emplace_back(mxnet::cpp::Shape(2, 4, 10, 10), ctx, false, 0);
+    weight_arr.emplace_back(mxnet::cpp::Shape(10, 4, 2, 2), ctx, false, 0);
+    bias_arr.emplace_back(mxnet::cpp::Shape(10), ctx, false, 0);
+    output_arr.emplace_back(mxnet::cpp::Shape(2, 10, 9, 9), ctx, false, 0);
     int begin = 0;
     int end = 1000;
     mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(data_arr[i]);
@@ -240,21 +252,32 @@ int main(int argc, char const *argv[]) {
     output_mx_arr[i] = (NDArray*)output_arr[i].GetHandle();
   }
 
+  std::vector<NDArray*> inputs, outputs;
+
+  for (size_t i = 0; i < num_threads; ++i) {
+    inputs.emplace_back(data_mx_arr[i]);
+    inputs.emplace_back(weight_mx_arr[i]);
+    inputs.emplace_back(bias_mx_arr[i]);
+    outputs.emplace_back(output_mx_arr[i]);
+  }
+
+  auto func = [&](int num) {
   std::vector<engine::VarHandle> read_vars, write_vars;
   std::vector<Resource> requested;
   std::vector<uint32_t> mutate_idx;
-  std::vector<NDArray*> inputs, outputs;
-  inputs.emplace_back(data_mx_arr[0]);
-  inputs.emplace_back(weight_mx_arr[0]);
-  inputs.emplace_back(bias_mx_arr[0]);
-  outputs.emplace_back(output_mx_arr[0]);
-  mxnet::Context ctx = mxnet::Context::CPU(0);
   DispatchMode dispatch_mode = DispatchMode::kFComputeEx;
-  SetDependency(attrs, ctx, inputs, outputs,
+  std::vector<NDArray*> tmp_inputs, tmp_outputs;
+  tmp_inputs.emplace_back(data_mx_arr[num]);
+  tmp_inputs.emplace_back(weight_mx_arr[num]);
+  tmp_inputs.emplace_back(bias_mx_arr[num]);
+  tmp_outputs.emplace_back(output_mx_arr[num]);
+  SetDependency(attrs, backend_ctx, tmp_inputs, tmp_outputs,
                 &read_vars, &write_vars, &requested, &mutate_idx, dispatch_mode);
   std::vector<NDArray> p_inputs, p_outputs;
-  DerefInputOutput(inputs, outputs, &p_inputs, &p_outputs);
-  FComputeEx fn_ex = GetFCompute<FComputeEx>(attrs.op, std::string("FComputeEx"), ctx);
+
+  DerefInputOutput(tmp_inputs, tmp_outputs, &p_inputs, &p_outputs);
+  FComputeEx fn_ex = GetFCompute<FComputeEx>(attrs.op, std::string("FComputeEx"), backend_ctx);
+
   bool is_train = false;
   bool need_grad = false;
   std::vector<OpReqType> reqs;
@@ -263,15 +286,33 @@ int main(int argc, char const *argv[]) {
       OpContext opctx{need_grad, is_train, rctx, engine::CallbackOnComplete(), requested};
       InvalidateOutputs(p_outputs, reqs);
       fn_ex(attrs, opctx, p_inputs, reqs, p_outputs);
+      if (backend_ctx.dev_mask() == gpu::kDevMask && !rctx.is_bulk) {
+          rctx.get_stream<gpu>()->Wait();
+      }
     };
 
-    Engine::Get()->PushSync(run, ctx, read_vars, write_vars, FnProperty::kNormal,
+    Engine::Get()->PushSync(run, backend_ctx, read_vars, write_vars, FnProperty::kNormal,
                             0, op->name.c_str());
+  };
 
-    mxnet::cpp::NDArray::WaitAll();
-    std::string name =
-        "/home/ubuntu/experimentals/upstream_mxnet/result.params";
-    std::unique_ptr<dmlc::Stream> fo(dmlc::Stream::Create(name.c_str(), "w"));
-    std::vector<std::string> op_names;
-    mxnet::NDArray::Save(fo.get(), p_outputs, op_names);
+  std::vector<std::thread> worker_threads(num_threads);
+  int count = 0;
+  for (auto&& i : worker_threads) {
+      i = std::thread(func, count);
+      count++;
+  }
+  for (auto&& i : worker_threads) {
+      i.join();
+  }
+  mxnet::cpp::NDArray::WaitAll();
+
+  std::string name = "/home/ubuntu/experimentals/upstream_mxnet/result.params";
+  std::unique_ptr<dmlc::Stream> fo(dmlc::Stream::Create(name.c_str(), "w"));
+  std::vector<std::string> op_names;
+  std::vector<NDArray> final_outputs;
+  final_outputs.resize(num_threads);
+  for (size_t i = 0; i < num_threads; ++i) {
+    final_outputs[i] = *(outputs[i]);
+  }
+  mxnet::NDArray::Save(fo.get(), final_outputs, op_names);
 }
