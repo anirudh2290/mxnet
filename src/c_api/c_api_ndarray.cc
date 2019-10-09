@@ -179,26 +179,43 @@ int MXCreateCachedOpEx(SymbolHandle handle,
   for (int i = 0; i < num_flags; ++i) {
     flags.emplace_back(keys[i], vals[i]);
   }
-  *out = new CachedOpPtr(new CachedOp(*sym, flags));
+  if (!thread_safe) {
+    *out = new CachedOpPtr(new CachedOp(*sym, flags));
+  } else {
+    *out = new CachedOpThreadSafePtr(new CachedOpThreadSafe(*sym, flags));
+  }
   API_END();
 }
 
 int MXFreeCachedOp(CachedOpHandle handle, bool thread_safe) {
-  CachedOpPtr* g = static_cast<CachedOpPtr*>(handle);
-  API_BEGIN();
-  delete g;
-  API_END();
+  if (!thread_safe) {
+    CachedOpPtr *g = static_cast<CachedOpPtr *>(handle);
+    API_BEGIN();
+    delete g;
+    API_END();
+  } else {
+    CachedOpThreadSafePtr *g = static_cast<CachedOpThreadSafePtr*>(handle);
+    API_BEGIN();
+    delete g;
+    API_END();
+  }
 }
 
 int MXInvokeCachedOp(CachedOpHandle handle,
                      int num_inputs,
                      NDArrayHandle *inputs,
                      int *num_outputs,
-                     NDArrayHandle **outputs) {
+                     NDArrayHandle **outputs,
+                     bool thread_safe) {
   MXAPIThreadLocalEntry<> *ret = MXAPIThreadLocalStore<>::Get();
 
   API_BEGIN();
-  CachedOpPtr op = *static_cast<CachedOpPtr*>(handle);
+  CachedOpPtr op;
+  if (thread_safe) {
+    op = *static_cast<CachedOpPtr *>(handle);
+  } else {
+    op = *static_cast<CachedOpThreadSafePtr *>(handle);
+  }
   std::vector<NDArray*> ndinputs;
   ndinputs.reserve(num_inputs);
   for (int i = 0; i < num_inputs; ++i) {
@@ -241,7 +258,7 @@ int MXInvokeCachedOpEx(CachedOpHandle handle,
                        const int **out_stypes,
                        bool thread_safe) {  // outputs storage types
   MXAPIThreadLocalEntry<> *ret = MXAPIThreadLocalStore<>::Get();
-  int err = MXInvokeCachedOp(handle, num_inputs, inputs, num_outputs, outputs);
+  int err = MXInvokeCachedOp(handle, num_inputs, inputs, num_outputs, outputs, thread_safe);
   if (err != 0) return err;
   API_BEGIN();
   NDArray** out_array = reinterpret_cast<NDArray**>(*outputs);

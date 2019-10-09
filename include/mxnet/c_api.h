@@ -1259,7 +1259,8 @@ MXNET_DLL int MXInvokeCachedOp(CachedOpHandle handle,
                                int num_inputs,
                                NDArrayHandle *inputs,
                                int *num_outputs,
-                               NDArrayHandle **outputs);
+                               NDArrayHandle **outputs,
+                               bool thread_safe = false);
 /*!
  * \brief invoke a cached op
  * \param handle the handle to the cached op
