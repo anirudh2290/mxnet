@@ -3,8 +3,8 @@ import time
 import argparse
 
 def main():
-    res = mx.nd.load("/home/ubuntu/experimentals/upstream_mxnet/result.params")
-    res_expected = mx.nd.load("/home/ubuntu/experimentals/upstream_mxnet/result_expected.params")
+    res = mx.nd.load("result.params")
+    res_expected = mx.nd.load("result_expected.params")
 
     assert len(res_expected) == len(res), "number of ndarrays differ in result_expected and result"
     print(len(res_expected))

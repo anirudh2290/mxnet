@@ -16,9 +16,11 @@
 using namespace mxnet::cpp;
 
 int main(int argc, char const *argv[]) {
-    CHECK(argc == 3) << "One argument expected : num_threads";
+    CHECK(argc == 4) << "One argument expected : num_threads";
     int num_threads = atoi(argv[1]);
+    LOG(INFO) << num_threads;
     std::string input_ctx = std::string(argv[2]);
+    bool thread_safe = atoi(argv[3]);
     mxnet::cpp::Context ctx = mxnet::cpp::Context::cpu();
     mxnet::Context backend_ctx;
     if (input_ctx == "cpu") {
@@ -114,7 +116,7 @@ int main(int argc, char const *argv[]) {
                              flag_keys.size(),
                              flag_key_cstrs.data(),
                              flag_val_cstrs.data(),
-                             &hdl);
+                             &hdl, thread_safe);
     if (ret < 0) {
         LOG(INFO) << MXGetLastError();
     }
@@ -129,7 +131,7 @@ int main(int argc, char const *argv[]) {
     arr_handles[1] = weight_arr[num].GetHandle();
     arr_handles[2] = bias_arr[num].GetHandle();
     int ret2 = MXInvokeCachedOpEx(hdl, 3, arr_handles.data(), &num_output,
-                                 &cached_op_handles[num], &stypes);
+                                 &cached_op_handles[num], &stypes, thread_safe);
     if (ret2 < 0) {
         LOG(INFO) << MXGetLastError();
     }

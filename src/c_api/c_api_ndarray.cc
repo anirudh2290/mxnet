@@ -37,6 +37,7 @@
 #include "../common/exec_utils.h"
 #include "../imperative/imperative_utils.h"
 #include "../imperative/cached_op.h"
+#include "../imperative/cached_op_threadsafe.h"
 
 using namespace mxnet;
 
@@ -201,50 +202,72 @@ int MXFreeCachedOp(CachedOpHandle handle, bool thread_safe) {
   }
 }
 
-int MXInvokeCachedOp(CachedOpHandle handle,
-                     int num_inputs,
-                     NDArrayHandle *inputs,
-                     int *num_outputs,
-                     NDArrayHandle **outputs,
-                     bool thread_safe) {
+int MXInvokeCachedOp(CachedOpHandle handle, int num_inputs,
+                     NDArrayHandle *inputs, int *num_outputs,
+                     NDArrayHandle **outputs, bool thread_safe) {
   MXAPIThreadLocalEntry<> *ret = MXAPIThreadLocalStore<>::Get();
 
   API_BEGIN();
-  CachedOpPtr op;
-  if (thread_safe) {
-    op = *static_cast<CachedOpPtr *>(handle);
-  } else {
-    op = *static_cast<CachedOpThreadSafePtr *>(handle);
-  }
-  std::vector<NDArray*> ndinputs;
+  std::vector<NDArray *> ndinputs;
   ndinputs.reserve(num_inputs);
   for (int i = 0; i < num_inputs; ++i) {
-    ndinputs.push_back(reinterpret_cast<NDArray*>(inputs[i]));
+    ndinputs.push_back(reinterpret_cast<NDArray *>(inputs[i]));
   }
 
-  std::vector<NDArray*> ndoutputs;
-  ndoutputs.reserve(op->num_outputs());
-  if (*outputs == nullptr) {
-    *num_outputs = op->num_outputs();
-    for (int i = 0; i < *num_outputs; ++i) ndoutputs.push_back(new NDArray());
+  if (!thread_safe) {
+    CachedOpPtr op;
+    op = *static_cast<CachedOpPtr *>(handle);
+    std::vector<NDArray *> ndoutputs;
+    ndoutputs.reserve(op->num_outputs());
+    if (*outputs == nullptr) {
+      *num_outputs = op->num_outputs();
+      for (int i = 0; i < *num_outputs; ++i)
+        ndoutputs.push_back(new NDArray());
+    } else {
+      CHECK_EQ(*num_outputs, op->num_outputs())
+          << "CachedOp expects " << op->num_outputs() << " outputs, but "
+          << *num_outputs << " was given.";
+      for (int i = 0; i < *num_outputs; ++i) {
+        ndoutputs.push_back(reinterpret_cast<NDArray *>((*outputs)[i]));
+      }
+    }
+    op->Forward(op, ndinputs, ndoutputs);
+    if (*outputs == nullptr) {
+      ret->ret_handles.clear();
+      ret->ret_handles.reserve(*num_outputs);
+      for (int i = 0; i < *num_outputs; ++i) {
+        ret->ret_handles.push_back(ndoutputs[i]);
+      }
+      *outputs = dmlc::BeginPtr(ret->ret_handles);
+    }
+
   } else {
-    CHECK_EQ(*num_outputs, op->num_outputs())
-        << "CachedOp expects " << op->num_outputs() << " outputs, but "
-        << *num_outputs << " was given.";
-    for (int i = 0; i < *num_outputs; ++i) {
-      ndoutputs.push_back(reinterpret_cast<NDArray*>((*outputs)[i]));
+    CachedOpThreadSafePtr op;
+    op = *static_cast<CachedOpThreadSafePtr *>(handle);
+    std::vector<NDArray *> ndoutputs;
+    ndoutputs.reserve(op->num_outputs());
+    if (*outputs == nullptr) {
+      *num_outputs = op->num_outputs();
+      for (int i = 0; i < *num_outputs; ++i)
+        ndoutputs.push_back(new NDArray());
+    } else {
+      CHECK_EQ(*num_outputs, op->num_outputs())
+          << "CachedOp expects " << op->num_outputs() << " outputs, but "
+          << *num_outputs << " was given.";
+      for (int i = 0; i < *num_outputs; ++i) {
+        ndoutputs.push_back(reinterpret_cast<NDArray *>((*outputs)[i]));
+      }
     }
-  }
 
-  op->Forward(op, ndinputs, ndoutputs);
-
-  if (*outputs == nullptr) {
-    ret->ret_handles.clear();
-    ret->ret_handles.reserve(*num_outputs);
-    for (int i = 0; i < *num_outputs; ++i) {
-      ret->ret_handles.push_back(ndoutputs[i]);
+    op->Forward(op, ndinputs, ndoutputs);
+    if (*outputs == nullptr) {
+      ret->ret_handles.clear();
+      ret->ret_handles.reserve(*num_outputs);
+      for (int i = 0; i < *num_outputs; ++i) {
+        ret->ret_handles.push_back(ndoutputs[i]);
+      }
+      *outputs = dmlc::BeginPtr(ret->ret_handles);
     }
-    *outputs = dmlc::BeginPtr(ret->ret_handles);
   }
 
   API_END();

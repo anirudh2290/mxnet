@@ -71,7 +71,6 @@ struct CachedOpThreadSafe::CachedOpThreadSafeState {
 OpStatePtr CachedOpThreadSafe::GetCachedOpThreadSafeState(
     const Context& ctx) {
 
-  std::lock_guard<std::mutex> lock(mutex_);
   for (const auto& i : cached_op_states_[ctx]) {
     // only create one state per device when not using static memory
     if (i.unique()) {
@@ -289,6 +288,7 @@ OpStatePtr CachedOpThreadSafe::DynamicForward(const Context& default_ctx,
 OpStatePtr CachedOpThreadSafe::Forward(const std::shared_ptr<CachedOpThreadSafe>& op_ptr,
                                        const std::vector<NDArray*>& inputs,
                                        const std::vector<NDArray*>& outputs) {
+  std::lock_guard<std::mutex> lock(mutex_);
   CHECK_EQ(inputs.size(), num_inputs());
   Context default_ctx = inputs[0]->ctx();
   const auto& idx = fwd_graph_.indexed_graph();
