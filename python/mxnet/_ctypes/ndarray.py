@@ -121,7 +121,7 @@ class CachedOp(object):
     """Cached operator handle."""
     __slots__ = ["handle", "is_np_sym", "_monitor_callback", "thread_safe"]
 
-    def __init__(self, sym, flags=()):
+    def __init__(self, sym, flags=(), thread_safe=False):
         self.handle = CachedOpHandle()
         self._monitor_callback = None
         self.thread_safe = thread_safe
