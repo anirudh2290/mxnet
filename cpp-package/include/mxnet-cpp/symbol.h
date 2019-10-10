@@ -174,6 +174,7 @@ class Symbol {
   *unnamed (empty string).
   */
   std::vector<std::string> ListArguments() const;
+  std::vector<std::string> ListInputs() const;
   /*! \return get the descriptions of outputs for this symbol */
   std::vector<std::string> ListOutputs() const;
   /*! \return get the descriptions of auxiliary data for this symbol */
