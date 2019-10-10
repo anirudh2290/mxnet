@@ -136,7 +136,6 @@ int main(int argc, char const *argv[]) {
     const int* stypes;
 
     std::vector<NDArrayHandle> arr_handles(num_inputs);
-    std::vector<NDArray> temp_res(num_threads);
     arr_handles[0] = data_arr[num].GetHandle();
     for (size_t i = 1; i < num_inputs - 1; ++i) {
         arr_handles[i] = params[i - 1].GetHandle();
@@ -148,8 +147,6 @@ int main(int argc, char const *argv[]) {
     if (ret2 < 0) {
         LOG(FATAL) << MXGetLastError();
     }
-    temp_res[num] = NDArray(*cached_op_handles[num]);
-    temp_res[num].WaitToRead();
     };
     std::vector<std::thread> worker_threads(num_threads);
     int count = 0;
@@ -161,12 +158,12 @@ int main(int argc, char const *argv[]) {
         i.join();
     }
 
+    NDArray::WaitAll();
     ms = ms_now() - ms;
     LOG(INFO) << "Time for parallel inference" << ms;
     std::vector<NDArray> res(num_threads);
     for (size_t i = 0; i < num_threads; ++i) {
       res[i] = NDArray(*cached_op_handles[i]);
-      res[i].WaitToRead();
     }
     std::string name =
         "result.params";
