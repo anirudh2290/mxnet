@@ -30,18 +30,14 @@ datas = []
 for i in range(num_threads):
     datas.append(mx.nd.random.uniform(i * 1000, i * 1000 + 1000, (1, 3, 224, 224)))
 result_expected = {}
-'''
 for i, data in enumerate(datas):
     result_expected[i] = net_fp32.forward(data)
-'''
 
 mx.nd.waitall()
 
 results = {}
 
 def _worker(i, data, net):
-    print("Inside worker forward")
-    sleep(40)
     results[i] = net.forward(data)
 
 for i in range(num_threads):
@@ -53,9 +49,7 @@ for i in range(num_threads):
 
 mx.nd.waitall()
 
-'''
 for key, val in results.items():
     mx.test_utils.assert_almost_equal(results[key].asnumpy(), result_expected[key].asnumpy(), rtol=1e-5, atol=1e-5)
-'''
 
 print("Completed successfully")
