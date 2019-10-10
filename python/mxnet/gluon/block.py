@@ -856,7 +856,7 @@ class HybridBlock(Block):
 
         return self._cached_graph
 
-    def _build_cache(self, *args):
+    def _build_cache(self, *args, thread_safe=False):
         data, out = self._get_graph(*args)
         data_names = {data.name: i for i, data in enumerate(data)}
         params = self.collect_params()
@@ -893,7 +893,7 @@ class HybridBlock(Block):
                 self._cached_op_args.append((False, params[name]))
         flags = [('data_indices', data_indices), ('param_indices', param_indices)] + \
                 self._flags
-        self._cached_op = ndarray.CachedOp(out, flags)
+        self._cached_op = ndarray.CachedOp(out, flags, thread_safe=thread_safe)
 
     def _deferred_infer_shape(self, *args):
         try:
@@ -903,9 +903,9 @@ class HybridBlock(Block):
                         " cannot be inferred. {}".format(e)
             raise ValueError(error_msg)
 
-    def _call_cached_op(self, *args):
+    def _call_cached_op(self, *args, thread_safe=False):
         if self._cached_op is None:
-            self._build_cache(*args)
+            self._build_cache(*args, thread_safe=thread_safe)
         assert self._cached_op, "cached op is not None"
         if self._callback:
             self._cached_op._register_op_hook(self._callback, self._monitor_all)
