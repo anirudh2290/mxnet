@@ -165,7 +165,9 @@ int main(int argc, char const *argv[]) {
     ms = ms_now() - ms;
     LOG(INFO) << "Time for parallel inference" << ms;
     for (size_t i = 0; i < num_threads; ++i) {
+      LOG(INFO) << i;
       res[i] = NDArray(*cached_op_handles[i]);
+      res[i].WaitToRead();
     }
     std::string name =
         "result.params";
