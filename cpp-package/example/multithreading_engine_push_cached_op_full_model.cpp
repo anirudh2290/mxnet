@@ -59,8 +59,8 @@ int main(int argc, char const *argv[]) {
     for (size_t i = 0; i < flag_vals.size(); ++i) {
         flag_val_cstrs.emplace_back(flag_vals[i].c_str());
     }
-    std::vector<NDArray> data_arr;
-    std::vector<NDArray> softmax_arr;
+    std::vector<NDArray> data_arr, data_arr2;
+    std::vector<NDArray> softmax_arr, softmax_arr2;
     std::vector<NDArray> params;
     for (std::string name : out.ListInputs()) {
       if (name == "arg:data") {
@@ -75,10 +75,12 @@ int main(int argc, char const *argv[]) {
     //CHECK(params.size() + 1 == out.ListInputs().size()) << "Please check if softmax_label was missed";
     for (size_t i = 0; i < num_threads; ++i) {
         data_arr.emplace_back(mxnet::cpp::Shape(1, 3, 224, 224), ctx, false, 0);
+        data_arr2.emplace_back(mxnet::cpp::Shape(1, 3, 224, 224), ctx, false, 0);
         softmax_arr.emplace_back(mxnet::cpp::Shape(1), ctx, false, 0);
+        softmax_arr2.emplace_back(mxnet::cpp::Shape(1), ctx, false, 0);
         int begin = i*1000;
         int end =  begin + 1000;
-        Operator("_random_uniform")(begin, end).Invoke(data_arr[i]);
+        mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(data_arr[i]);
         NDArray::WaitAll();
     }
 
@@ -111,13 +113,45 @@ int main(int argc, char const *argv[]) {
     if (ret4 < 0) {
         LOG(FATAL) << MXGetLastError();
     }
+    }
     NDArray::WaitAll();
-    result_expected[i] = NDArray(*nd_ptrs[i]);
+    for (size_t i = 0; i < num_threads; ++i) {
+        result_expected[i] = NDArray(*nd_ptrs[i]);
     }
   ms = ms_now() - ms;
+
+    LOG(INFO) << "Time for serial inference" << ms;
+  ms = ms_now();
+
+    std::vector<NDArrayHandle> arr_handles2(num_inputs);
+    std::vector<NDArrayHandle*> nd_ptrs2(num_threads);
+    std::vector<NDArray> result_expected2(num_threads);
+    for (size_t i = 0; i < num_threads; ++i) {
+    int num_output = 0;
+
+    arr_handles2[0] = data_arr2[i].GetHandle();
+    for (size_t i = 1; i < num_inputs - 1; ++i) {
+        arr_handles2[i] = params[i - 1].GetHandle();
+    }
+    arr_handles2[num_inputs - 1] = softmax_arr2[i].GetHandle();
+    const int* stypes;
+
+    int ret4 = MXInvokeCachedOpEx(hdl, num_inputs, arr_handles2.data(), &num_output,
+                                  &nd_ptrs2[i], &stypes);
+    if (ret4 < 0) {
+        LOG(FATAL) << MXGetLastError();
+    }
+    NDArray::WaitAll();
+    result_expected2[i] = NDArray(*nd_ptrs2[i]);
+    }
+  ms = ms_now() - ms;
+
     LOG(INFO) << "Time for serial inference" << ms;
     std::string name_orig = "result_expected.params";
+    std::string name_orig2 = "result_expected2.params";
     NDArray::Save(name_orig, result_expected);
+    NDArray::Save(name_orig2, result_expected2);
+
 
     ret1 = MXCreateCachedOpEx(out.GetHandle(),
                               flag_keys.size(),
@@ -131,7 +165,11 @@ int main(int argc, char const *argv[]) {
 
     ms = ms_now();
     std::vector<NDArrayHandle*> cached_op_handles(num_threads);
+    std::vector<NDArrayHandle*> cached_op_handles2(num_threads);
+    std::vector<NDArray> res(num_threads);
+    std::vector<NDArray> res2(num_threads);
     auto func = [&](int num) {
+    double ms = ms_now();
     int num_output = 0;
     const int* stypes;
 
@@ -147,6 +185,31 @@ int main(int argc, char const *argv[]) {
     if (ret2 < 0) {
         LOG(FATAL) << MXGetLastError();
     }
+
+    res[num] = NDArray(*cached_op_handles[num]);
+    res[num].WaitToRead();
+    LOG(INFO) << "thread num: " << num << " parallel inference time " << ms_now() - ms;
+    double ms2 = ms_now();
+
+    std::vector<NDArrayHandle> arr_handles2(num_inputs);
+    arr_handles2[0] = data_arr2[num].GetHandle();
+    for (size_t i = 1; i < num_inputs - 1; ++i) {
+        arr_handles2[i] = params[i - 1].GetHandle();
+    }
+    arr_handles2[num_inputs - 1] = softmax_arr2[num].GetHandle();
+
+
+    int num_output2 = 0;
+    const int* stypes2;
+    ret2 = MXInvokeCachedOpEx(hdl, num_inputs, arr_handles.data(), &num_output2,
+                              &(cached_op_handles2[num]), &stypes2, true);
+    if (ret2 < 0) {
+        LOG(FATAL) << MXGetLastError();
+    }
+    res2[num] = NDArray(*cached_op_handles2[num]);
+    res2[num].WaitToRead();
+
+    LOG(INFO) << "thread num: " << num << " parallel inference 2 time " << ms_now() - ms2;
     };
     std::vector<std::thread> worker_threads(num_threads);
     int count = 0;
@@ -161,11 +224,14 @@ int main(int argc, char const *argv[]) {
     NDArray::WaitAll();
     ms = ms_now() - ms;
     LOG(INFO) << "Time for parallel inference" << ms;
-    std::vector<NDArray> res(num_threads);
+    /*
     for (size_t i = 0; i < num_threads; ++i) {
       res[i] = NDArray(*cached_op_handles[i]);
     }
+    */
     std::string name =
         "result.params";
+    std::string name2 = "result2.params";
     NDArray::Save(name, res);
+    NDArray::Save(name2, res2);
 }
