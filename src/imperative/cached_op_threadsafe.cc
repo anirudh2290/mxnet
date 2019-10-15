@@ -31,6 +31,16 @@ DMLC_REGISTER_PARAMETER(CachedOpThreadSafeConfig);
 
 constexpr uint32_t kEidNotExist = std::numeric_limits<uint32_t>::max();
 
+
+struct CachedOpThreadSafe::GraphInfo {
+  nnvm::Graph fwd_graph;
+};
+
+struct CachedOpThreadSafe::DynamicRuntime {
+  GraphInfo info;
+  std::vector<OpStatePtr> op_states;
+};
+
 struct CachedOpThreadSafe::CachedOpThreadSafeState {
   CachedOpThreadSafeState(const Context &context_,
                           const nnvm::Graph &fwd_graph_) {
@@ -38,7 +48,6 @@ struct CachedOpThreadSafe::CachedOpThreadSafeState {
     context = context_;
     info.fwd_graph = fwd_graph_;
 
-    size_t max_nodes = info.fwd_graph.indexed_graph().num_nodes();
     size_t max_entries = info.fwd_graph.indexed_graph().num_node_entries();
     info.fwd_graph.attrs["context"] =
         std::make_shared<dmlc::any>(std::vector<Context>(
@@ -52,7 +61,7 @@ struct CachedOpThreadSafe::CachedOpThreadSafeState {
 
   std::mutex mutex;
   Context context;
-  mxnet::GraphInfo info;
+  GraphInfo info;
   bool fwd_alloc = false;
   bool fwd_exec_init = false;
 
@@ -149,7 +158,7 @@ CachedOpThreadSafe::CachedOpThreadSafe(const nnvm::Symbol& sym,
 
 }
 
-bool CachedOpThreadSafe::SetForwardGraph(mxnet::GraphInfo *info,
+bool CachedOpThreadSafe::SetForwardGraph(GraphInfo *info,
                                          const std::vector<NDArray *> &inputs) {
   using namespace nnvm;
   using namespace imperative;
@@ -219,21 +228,20 @@ OpStatePtr CachedOpThreadSafe::DynamicForward(const Context& default_ctx,
 
   {
   auto state_ptr = GetCachedOpThreadSafeState(default_ctx);
-  OpStatePtr op_state;
-  //auto op_state = OpStatePtr::Create<DynamicRuntime>();
-  //auto &runtime = op_state.get_state<DynamicRuntime>();
+  auto op_state = OpStatePtr::Create<DynamicRuntime>();
+  auto &runtime = op_state.get_state<DynamicRuntime>();
   {
     auto &state = state_ptr.get_state<CachedOpThreadSafeState>();
     std::lock_guard<std::mutex> lock(state.mutex);
     SetForwardGraph(&state.info, inputs);
-    info.fwd_graph = state.info.fwd_graph;
+    runtime.info.fwd_graph = state.info.fwd_graph;
   }
-  nnvm::Graph &g = info.fwd_graph;
+  nnvm::Graph &g = runtime.info.fwd_graph;
   const auto &idx = g.indexed_graph();
   size_t num_inputs = idx.input_nodes().size();
-  size_t max_nodes = info.fwd_graph.indexed_graph().num_nodes();
-  op_states.resize(max_nodes);
-  auto &states = op_states;
+  size_t max_nodes = runtime.info.fwd_graph.indexed_graph().num_nodes();
+  runtime.op_states.resize(max_nodes);
+  auto &states = runtime.op_states;
 
   // Allocate entries
   buff.resize(idx.num_node_entries());

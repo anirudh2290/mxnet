@@ -52,18 +52,10 @@ struct CachedOpThreadSafeConfig
   }
 };
 
-struct GraphInfo {
-  nnvm::Graph fwd_graph;
-};
-
 #if DMLC_CXX11_THREAD_LOCAL
-    static thread_local mxnet::GraphInfo info;
     static thread_local std::vector<NDArray> buff;
-    static thread_local std::vector<OpStatePtr> op_states;
 #else
-    static MX_THREAD_LOCAL mxnet::GraphInfo info;
     static MX_THREAD_LOCAL std::vector<NDArray> buff;
-    static MX_THREAD_LOCAL std::vector<OpStatePtr> op_states;
 #endif
 
 
@@ -102,7 +94,9 @@ public:
   }
 
 private:
+  struct GraphInfo;
   struct CachedOpThreadSafeState;
+  struct DynamicRuntime;
 
 
   OpStatePtr GetCachedOpThreadSafeState(const Context& ctx);
