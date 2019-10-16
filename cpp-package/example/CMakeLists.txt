@@ -94,3 +94,7 @@ add_dependencies(multithreading_engine_multiple_cached_op ${CPPEX_DEPS})
 add_executable(multithreading_engine_push_cached_op_full_model_multi_gpu multithreading_engine_push_cached_op_full_model_multi_gpu.cpp ${CPP_PACKAGE_HEADERS})
 target_link_libraries(multithreading_engine_push_cached_op_full_model_multi_gpu ${CPP_EXAMPLE_LIBS})
 add_dependencies(multithreading_engine_push_cached_op_full_model_multi_gpu ${CPPEX_DEPS})
+
+add_executable(multithreading_engine_push_test_tls multithreading_engine_push_test_tls.cpp ${CPP_PACKAGE_HEADERS})
+target_link_libraries(multithreading_engine_push_test_tls ${CPP_EXAMPLE_LIBS})
+add_dependencies(multithreading_engine_push_test_tls ${CPPEX_DEPS})
