@@ -14,6 +14,10 @@
 #include <vector>
 #include "mxnet-cpp/MxNetCpp.h"
 
+/*
+ * Ops pushed from different threads: one thread per op, wait_to_read in each thread, followed by waitall in main thread
+ */
+
 using namespace mxnet;
 
 inline void DerefInputOutput(const std::vector<NDArray*>& inputs,
@@ -294,6 +298,9 @@ int main(int argc, char const *argv[]) {
 
     Engine::Get()->PushSync(run, backend_ctx, read_vars, write_vars, FnProperty::kNormal,
                             0, op->name.c_str());
+    for (const engine::VarHandle& var : read_vars) {
+        Engine::Get()->WaitForVar(var);
+    }
   };
 
   std::vector<std::thread> worker_threads(num_threads);

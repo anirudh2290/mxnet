@@ -14,6 +14,10 @@
 #include <vector>
 #include "mxnet-cpp/MxNetCpp.h"
 
+/*
+ * Ops pushed from different threads: one thread per op, wait_to_read in each thread, followed by waitall in main thread
+ */
+
 using namespace mxnet;
 
 inline void DerefInputOutput(const std::vector<NDArray*>& inputs,
@@ -158,20 +162,27 @@ int main(int argc, char const *argv[]) {
   attrs.dict = u;
   op->attr_parser(&attrs);
 
-  std::vector<mxnet::cpp::NDArray> data_arr;
-  std::vector<mxnet::cpp::NDArray> weight_arr;
-  std::vector<mxnet::cpp::NDArray> bias_arr;
-  std::vector<mxnet::cpp::NDArray> output_arr;
+  std::vector<mxnet::cpp::NDArray> data_arr, data_arr2;
+  std::vector<mxnet::cpp::NDArray> weight_arr, weight_arr2;
+  std::vector<mxnet::cpp::NDArray> bias_arr, bias_arr2;
+  std::vector<mxnet::cpp::NDArray> output_arr, output_arr2;
   for (size_t i = 0; i < num_threads; ++i) {
     data_arr.emplace_back(mxnet::cpp::Shape(2, 4, 10, 10), ctx, false, 0);
     weight_arr.emplace_back(mxnet::cpp::Shape(10, 4, 2, 2), ctx, false, 0);
     bias_arr.emplace_back(mxnet::cpp::Shape(10), ctx, false, 0);
     output_arr.emplace_back(mxnet::cpp::Shape(2, 10, 9, 9), ctx, false, 0);
+    data_arr2.emplace_back(mxnet::cpp::Shape(2, 4, 10, 10), ctx, false, 0);
+    weight_arr2.emplace_back(mxnet::cpp::Shape(10, 4, 2, 2), ctx, false, 0);
+    bias_arr2.emplace_back(mxnet::cpp::Shape(10), ctx, false, 0);
+    output_arr2.emplace_back(mxnet::cpp::Shape(2, 10, 9, 9), ctx, false, 0);
     int begin = 1000 * i;
     int end = begin + 1000;
     mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(data_arr[i]);
     mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(weight_arr[i]);
     mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(bias_arr[i]);
+    mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(data_arr2[i]);
+    mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(weight_arr2[i]);
+    mxnet::cpp::Operator("_random_uniform")(begin, end).Invoke(bias_arr2[i]);
     mxnet::cpp::NDArray::WaitAll();
   }
 
@@ -218,9 +229,10 @@ int main(int argc, char const *argv[]) {
     std::vector<NDArrayHandle> arr_handles(3);
     std::vector<NDArrayHandle*> nd_ptrs(num_threads);
     std::vector<mxnet::cpp::NDArray> result_expected(num_threads);
+    std::vector<mxnet::cpp::NDArray> result_expected2(num_threads);
 
     for (size_t i = 0; i < num_threads; ++i) {
-    int num_output = 0;
+    int num_output;
 
     arr_handles[0] = data_arr[i].GetHandle();
     arr_handles[1] = weight_arr[i].GetHandle();
@@ -239,18 +251,51 @@ int main(int argc, char const *argv[]) {
     std::string name_expected =
         "/home/ubuntu/experimentals/mxnet_thread_safe_poc/result_expected.params";
     mxnet::cpp::NDArray::Save(name_expected, result_expected);
+    std::vector<NDArrayHandle> arr_handles2(3);
+    std::vector<NDArrayHandle*> nd_ptrs2(num_threads);
+
+    for (size_t i = 0; i < num_threads; ++i) {
+    int num_output;
+
+    arr_handles2[0] = data_arr2[i].GetHandle();
+    arr_handles2[1] = weight_arr2[i].GetHandle();
+    arr_handles2[2] = bias_arr2[i].GetHandle();
+    const int* stypes;
+
+    int ret4 = MXInvokeCachedOpEx(hdl, 3, arr_handles2.data(), &num_output,
+                                  &nd_ptrs2[i], &stypes);
+    if (ret4 < 0) {
+        LOG(INFO) << MXGetLastError();
+    }
+    mxnet::cpp::NDArray::WaitAll();
+    result_expected2[i] = mxnet::cpp::NDArray(*nd_ptrs2[i]);
+    }
+    std::string name_expected2 =
+        "/home/ubuntu/experimentals/mxnet_thread_safe_poc/result_expected2.params";
+    mxnet::cpp::NDArray::Save(name_expected2, result_expected2);
+
+
 
   /*Run multithreaded*/
   std::vector<mxnet::NDArray*> data_mx_arr, weight_mx_arr, bias_mx_arr, output_mx_arr;
+  std::vector<mxnet::NDArray*> data_mx_arr2, weight_mx_arr2, bias_mx_arr2, output_mx_arr2;
   data_mx_arr.resize(num_threads);
   weight_mx_arr.resize(num_threads);
   bias_mx_arr.resize(num_threads);
   output_mx_arr.resize(num_threads);
+  data_mx_arr2.resize(num_threads);
+  weight_mx_arr2.resize(num_threads);
+  bias_mx_arr2.resize(num_threads);
+  output_mx_arr2.resize(num_threads);
   for (size_t i = 0; i < num_threads; ++i) {
     data_mx_arr[i] = (NDArray*)data_arr[i].GetHandle();
     weight_mx_arr[i] = (NDArray*)weight_arr[i].GetHandle();
     bias_mx_arr[i] = (NDArray*)bias_arr[i].GetHandle();
     output_mx_arr[i] = (NDArray*)output_arr[i].GetHandle();
+    data_mx_arr2[i] = (NDArray*)data_arr2[i].GetHandle();
+    weight_mx_arr2[i] = (NDArray*)weight_arr2[i].GetHandle();
+    bias_mx_arr2[i] = (NDArray*)bias_arr2[i].GetHandle();
+    output_mx_arr2[i] = (NDArray*)output_arr2[i].GetHandle();
   }
 
   std::vector<NDArray*> inputs, outputs;
@@ -261,22 +306,49 @@ int main(int argc, char const *argv[]) {
     inputs.emplace_back(bias_mx_arr[i]);
     outputs.emplace_back(output_mx_arr[i]);
   }
+  std::vector<NDArray*> inputs2, outputs2;
+  for (size_t i = 0; i < num_threads; ++i) {
+    inputs2.emplace_back(data_mx_arr2[i]);
+    inputs2.emplace_back(weight_mx_arr2[i]);
+    inputs2.emplace_back(bias_mx_arr2[i]);
+    outputs2.emplace_back(output_mx_arr2[i]);
+  }
 
+
+  std::vector<std::vector<engine::VarHandle>> read_vars;
+  std::vector<std::vector<engine::VarHandle>> write_vars;
+  read_vars.resize(num_threads);
+  write_vars.resize(num_threads);
+  std::vector<std::vector<engine::VarHandle>> read_vars2;
+  std::vector<std::vector<engine::VarHandle>> write_vars2;
+  read_vars2.resize(num_threads);
+  write_vars2.resize(num_threads);
   auto func = [&](int num) {
-  std::vector<engine::VarHandle> read_vars, write_vars;
-  std::vector<Resource> requested;
-  std::vector<uint32_t> mutate_idx;
+  //std::vector<engine::VarHandle> read_vars, write_vars;
+  std::vector<Resource> requested, requested2;
+  std::vector<uint32_t> mutate_idx, mutate_idx2;
   DispatchMode dispatch_mode = DispatchMode::kFComputeEx;
+  DispatchMode dispatch_mode2 = DispatchMode::kFComputeEx;
   std::vector<NDArray*> tmp_inputs, tmp_outputs;
+  std::vector<NDArray*> tmp_inputs2, tmp_outputs2;
   tmp_inputs.emplace_back(data_mx_arr[num]);
   tmp_inputs.emplace_back(weight_mx_arr[num]);
   tmp_inputs.emplace_back(bias_mx_arr[num]);
   tmp_outputs.emplace_back(output_mx_arr[num]);
+  tmp_inputs2.emplace_back(data_mx_arr2[num]);
+  tmp_inputs2.emplace_back(weight_mx_arr2[num]);
+  tmp_inputs2.emplace_back(bias_mx_arr2[num]);
+  tmp_outputs2.emplace_back(output_mx_arr2[num]);
   SetDependency(attrs, backend_ctx, tmp_inputs, tmp_outputs,
-                &read_vars, &write_vars, &requested, &mutate_idx, dispatch_mode);
+                &read_vars[num], &write_vars[num], &requested, &mutate_idx, dispatch_mode);
+  SetDependency(attrs, backend_ctx, tmp_inputs2, tmp_outputs2,
+                &read_vars2[num], &write_vars2[num], &requested2, &mutate_idx2, dispatch_mode2);
   std::vector<NDArray> p_inputs, p_outputs;
 
   DerefInputOutput(tmp_inputs, tmp_outputs, &p_inputs, &p_outputs);
+
+  std::vector<NDArray> p_inputs2, p_outputs2;
+  DerefInputOutput(tmp_inputs2, tmp_outputs2, &p_inputs2, &p_outputs2);
   FComputeEx fn_ex = GetFCompute<FComputeEx>(attrs.op, std::string("FComputeEx"), backend_ctx);
 
   bool is_train = false;
@@ -292,7 +364,18 @@ int main(int argc, char const *argv[]) {
       }
     };
 
-    Engine::Get()->PushSync(run, backend_ctx, read_vars, write_vars, FnProperty::kNormal,
+  const auto& run2 = [=](RunContext rctx) {
+      OpContext opctx{need_grad, is_train, rctx, engine::CallbackOnComplete(), requested2};
+      InvalidateOutputs(p_outputs2, reqs);
+      fn_ex(attrs, opctx, p_inputs2, reqs, p_outputs2);
+      if (backend_ctx.dev_mask() == gpu::kDevMask && !rctx.is_bulk) {
+          rctx.get_stream<gpu>()->Wait();
+      }
+    };
+
+    Engine::Get()->PushSync(run, backend_ctx, read_vars[num], write_vars[num], FnProperty::kNormal,
+                            0, op->name.c_str());
+    Engine::Get()->PushSync(run2, backend_ctx, read_vars2[num], write_vars2[num], FnProperty::kNormal,
                             0, op->name.c_str());
   };
 
@@ -306,6 +389,17 @@ int main(int argc, char const *argv[]) {
       i.join();
   }
   mxnet::cpp::NDArray::WaitAll();
+  for (size_t i = 0; i < num_threads; ++i) {
+    for (const engine::VarHandle& var : write_vars[i]) {
+        Engine::Get()->WaitForVar(var);
+    }
+  }
+
+  for (size_t i = 0; i < num_threads; ++i) {
+    for (const engine::VarHandle& var : write_vars2[i]) {
+        Engine::Get()->WaitForVar(var);
+    }
+  }
 
   std::string name = "/home/ubuntu/experimentals/mxnet_thread_safe_poc/result.params";
   std::unique_ptr<dmlc::Stream> fo(dmlc::Stream::Create(name.c_str(), "w"));
@@ -316,4 +410,14 @@ int main(int argc, char const *argv[]) {
     final_outputs[i] = *(outputs[i]);
   }
   mxnet::NDArray::Save(fo.get(), final_outputs, op_names);
+
+
+  std::string name2 = "/home/ubuntu/experimentals/mxnet_thread_safe_poc/result2.params";
+  std::unique_ptr<dmlc::Stream> fo2(dmlc::Stream::Create(name2.c_str(), "w"));
+  std::vector<NDArray> final_outputs2;
+  final_outputs2.resize(num_threads);
+  for (size_t i = 0; i < num_threads; ++i) {
+    final_outputs2[i] = *(outputs2[i]);
+  }
+  mxnet::NDArray::Save(fo2.get(), final_outputs2, op_names);
 }

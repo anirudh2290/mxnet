@@ -14,6 +14,10 @@
 #include <vector>
 #include "mxnet-cpp/MxNetCpp.h"
 
+/*
+ * Ops pushed from different threads: one thread per op, wait_to_read in each thread, followed by waitall in main thread
+ */
+
 using namespace mxnet;
 
 inline void DerefInputOutput(const std::vector<NDArray*>& inputs,
@@ -262,8 +266,12 @@ int main(int argc, char const *argv[]) {
     outputs.emplace_back(output_mx_arr[i]);
   }
 
+  std::vector<std::vector<engine::VarHandle>> read_vars;
+  std::vector<std::vector<engine::VarHandle>> write_vars;
+  read_vars.resize(num_threads);
+  write_vars.resize(num_threads);
   auto func = [&](int num) {
-  std::vector<engine::VarHandle> read_vars, write_vars;
+  //std::vector<engine::VarHandle> read_vars, write_vars;
   std::vector<Resource> requested;
   std::vector<uint32_t> mutate_idx;
   DispatchMode dispatch_mode = DispatchMode::kFComputeEx;
@@ -273,7 +281,7 @@ int main(int argc, char const *argv[]) {
   tmp_inputs.emplace_back(bias_mx_arr[num]);
   tmp_outputs.emplace_back(output_mx_arr[num]);
   SetDependency(attrs, backend_ctx, tmp_inputs, tmp_outputs,
-                &read_vars, &write_vars, &requested, &mutate_idx, dispatch_mode);
+                &read_vars[num], &write_vars[num], &requested, &mutate_idx, dispatch_mode);
   std::vector<NDArray> p_inputs, p_outputs;
 
   DerefInputOutput(tmp_inputs, tmp_outputs, &p_inputs, &p_outputs);
@@ -292,7 +300,7 @@ int main(int argc, char const *argv[]) {
       }
     };
 
-    Engine::Get()->PushSync(run, backend_ctx, read_vars, write_vars, FnProperty::kNormal,
+    Engine::Get()->PushSync(run, backend_ctx, read_vars[num], write_vars[num], FnProperty::kNormal,
                             0, op->name.c_str());
   };
 
@@ -306,6 +314,11 @@ int main(int argc, char const *argv[]) {
       i.join();
   }
   mxnet::cpp::NDArray::WaitAll();
+  for (size_t i = 0; i < num_threads; ++i) {
+    for (const engine::VarHandle& var : write_vars[i]) {
+        Engine::Get()->WaitForVar(var);
+    }
+  }
 
   std::string name = "/home/ubuntu/experimentals/mxnet_thread_safe_poc/result.params";
   std::unique_ptr<dmlc::Stream> fo(dmlc::Stream::Create(name.c_str(), "w"));
