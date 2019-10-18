@@ -31,6 +31,7 @@ int ThreadSafetyTest() {
       ret->a.push_back(tmp_inputs[i]);
   }
   LOG(INFO) << dmlc::BeginPtr(ret->a);
+  return 0;
 }
 
 int main(int argc, char const *argv[]) {
