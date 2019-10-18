@@ -87,6 +87,10 @@ add_executable(multithreading_engine_push_mxnet_op3 multithreading_engine_push_m
 target_link_libraries(multithreading_engine_push_mxnet_op3 ${CPP_EXAMPLE_LIBS})
 add_dependencies(multithreading_engine_push_mxnet_op3 ${CPPEX_DEPS})
 
+add_executable(multithreading_engine_push_mxnet_op4 multithreading_engine_push_mxnet_op4.cpp ${CPP_PACKAGE_HEADERS})
+target_link_libraries(multithreading_engine_push_mxnet_op4 ${CPP_EXAMPLE_LIBS})
+add_dependencies(multithreading_engine_push_mxnet_op4 ${CPPEX_DEPS})
+
 add_executable(multithreading_engine_push_cached_op multithreading_engine_push_cached_op.cpp ${CPP_PACKAGE_HEADERS})
 target_link_libraries(multithreading_engine_push_cached_op ${CPP_EXAMPLE_LIBS})
 add_dependencies(multithreading_engine_push_cached_op ${CPPEX_DEPS})
