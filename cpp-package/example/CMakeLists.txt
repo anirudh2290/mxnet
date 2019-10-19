@@ -103,6 +103,10 @@ add_executable(multithreading_engine_wait_to_read multithreading_engine_wait_to_
 target_link_libraries(multithreading_engine_wait_to_read ${CPP_EXAMPLE_LIBS})
 add_dependencies(multithreading_engine_wait_to_read ${CPPEX_DEPS})
 
+add_executable(multithreading_engine_wait_to_read2 multithreading_engine_wait_to_read2.cpp ${CPP_PACKAGE_HEADERS})
+target_link_libraries(multithreading_engine_wait_to_read2 ${CPP_EXAMPLE_LIBS})
+add_dependencies(multithreading_engine_wait_to_read2 ${CPPEX_DEPS})
+
 add_executable(multithreading_engine_multiple_cached_op multithreading_engine_multiple_cached_op.cpp ${CPP_PACKAGE_HEADERS})
 target_link_libraries(multithreading_engine_multiple_cached_op ${CPP_EXAMPLE_LIBS})
 add_dependencies(multithreading_engine_multiple_cached_op ${CPPEX_DEPS})
